@@ -413,7 +413,6 @@ export default function PlayPage() {
   // ── Derived ─────────────────────────────────────────────────────────────
 
   const isActive = gameState === "playing" || gameState === "grace";
-  const isInGame = gameState === "preview" || gameState === "playing" || gameState === "grace" || gameState === "won" || gameState === "lost";
   const isFinished = gameState === "won" || gameState === "lost";
   const isUrgent = gameState === "grace" || (gameState === "playing" && timeRemaining <= 10);
   const timerPercent = gameState === "grace" ? (graceRemaining / GRACE_SECONDS) * 100
