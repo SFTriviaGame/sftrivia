@@ -21,7 +21,7 @@ interface PuzzleData {
   availableTags: string[];
 }
 
-type GameState = "loading" | "ready" | "playing" | "grace" | "won" | "lost";
+type GameState = "loading" | "ready" | "preview" | "playing" | "grace" | "won" | "lost";
 
 // ── Fuzzy matching ──────────────────────────────────────────────────────────
 
@@ -70,9 +70,10 @@ function isCorrectGuess(guess: string, answer: string): boolean {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const TIMER_SECONDS = 60;
-const GRACE_SECONDS = 6;
+const TIMER_SECONDS = 45;
+const GRACE_SECONDS = 3;
 const REVEAL_INTERVAL = 3;
+const PREVIEW_SECONDS = 3;
 const SCORE_MAX = 1000;
 const SCORE_FLOOR = 50;
 const WRONG_PENALTY = 50;
@@ -217,14 +218,22 @@ export default function PlayPage() {
       .catch(console.error);
   }, [fetchPuzzle]);
 
-  // ── Start game ──────────────────────────────────────────────────────────
+  // ── Start game (goes through preview) ───────────────────────────────────
 
   const startGame = () => {
-    setGameState("playing");
     setRevealedCount(1);
+    setGameState("preview");
   };
 
-  // ── Load next puzzle (skips intro) ──────────────────────────────────────
+  // ── Preview timer — 3 seconds then playing ─────────────────────────────
+
+  useEffect(() => {
+    if (gameState !== "preview") return;
+    const t = setTimeout(() => setGameState("playing"), PREVIEW_SECONDS * 1000);
+    return () => clearTimeout(t);
+  }, [gameState]);
+
+  // ── Load next puzzle (skips intro, goes through preview) ────────────────
 
   const loadNextPuzzle = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -245,8 +254,8 @@ export default function PlayPage() {
     setCopied(false);
     fetchPuzzle(selectedTag)
       .then(() => {
-        setGameState("playing");
         setRevealedCount(1);
+        setGameState("preview");
       })
       .catch(console.error);
   };
@@ -404,10 +413,12 @@ export default function PlayPage() {
   // ── Derived ─────────────────────────────────────────────────────────────
 
   const isActive = gameState === "playing" || gameState === "grace";
+  const isInGame = gameState === "preview" || gameState === "playing" || gameState === "grace" || gameState === "won" || gameState === "lost";
   const isFinished = gameState === "won" || gameState === "lost";
   const isUrgent = gameState === "grace" || (gameState === "playing" && timeRemaining <= 10);
   const timerPercent = gameState === "grace" ? (graceRemaining / GRACE_SECONDS) * 100
-    : gameState === "playing" ? (timeRemaining / TIMER_SECONDS) * 100 : 0;
+    : gameState === "playing" ? (timeRemaining / TIMER_SECONDS) * 100
+    : gameState === "preview" ? 100 : 0;
 
   // Sorted tags for display
   const displayTags = ["all", ...availableTags].sort((a, b) => {
@@ -525,7 +536,7 @@ export default function PlayPage() {
     );
   }
 
-  // ── Game + Results ──────────────────────────────────────────────────────
+  // ── Game (preview + playing + grace + results) ──────────────────────────
 
   return (
     <>
@@ -534,11 +545,24 @@ export default function PlayPage() {
         {/* Sticky header */}
         <header className="sticky top-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-b border-[#e8e5de]">
           <div className="max-w-lg mx-auto px-4 pt-3 pb-3">
+            {/* Back to menu */}
+            {!isFinished && (
+              <button
+                onClick={() => changeCategory(selectedTag)}
+                className="text-[10px] text-[#8b8b8b] hover:text-[#4a4a4a] mb-2 transition-colors"
+              >
+                ← Menu
+              </button>
+            )}
+
             {/* Title + score */}
             <div className="flex items-center justify-between mb-2.5">
               <div>
                 <p className="text-[10px] tracking-[4px] text-[#8b8b8b] uppercase" aria-hidden="true">Deep Cut</p>
                 <h1 className="font-display text-xl tracking-tight text-[#1a1a1a]">Name the Artist</h1>
+                {selectedTag !== "all" && (
+                  <p className="text-[10px] text-[#b45309] tracking-wide">{TAG_LABELS[selectedTag] || selectedTag}</p>
+                )}
               </div>
               <div className="text-right" aria-live="polite">
                 <p
@@ -553,6 +577,7 @@ export default function PlayPage() {
                   {isFinished ? finalScore : score}
                 </p>
                 <p className="text-[11px] mt-0.5" style={{ color: isUrgent && isActive ? "#b91c1c" : "#6b6b6b" }}>
+                  {gameState === "preview" && <span className="text-[#b45309]">Get ready...</span>}
                   {gameState === "grace" && <span aria-live="assertive">GRACE {graceRemaining}s</span>}
                   {gameState === "playing" && <span>{timeRemaining}s</span>}
                   {gameState === "won" && <span style={{ color: "#15803d" }}>pts</span>}
@@ -576,18 +601,22 @@ export default function PlayPage() {
               aria-valuenow={Math.round(timerPercent)}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label={gameState === "grace" ? `Grace period: ${graceRemaining} seconds` : `Time remaining: ${timeRemaining} seconds`}
+              aria-label={
+                gameState === "preview" ? "Get ready"
+                : gameState === "grace" ? `Grace period: ${graceRemaining} seconds`
+                : `Time remaining: ${timeRemaining} seconds`
+              }
             >
               <div
                 className="h-full rounded-full transition-all duration-1000 linear"
                 style={{
                   width: `${isFinished ? 0 : timerPercent}%`,
-                  backgroundColor: isUrgent ? "#b91c1c" : "#b45309",
+                  backgroundColor: gameState === "preview" ? "#b45309" : isUrgent ? "#b91c1c" : "#b45309",
                 }}
               />
             </div>
 
-            {/* Guess input */}
+            {/* Guess input — only during active play, not preview */}
             {isActive && (
               <div className={wrongFlash ? "animate-shake" : ""} role="form" aria-label="Guess the artist">
                 <div
@@ -703,7 +732,7 @@ export default function PlayPage() {
             <ol className="space-y-1 list-none" aria-label="Song clues">
               {Array.from({ length: revealedCount }, (_, i) => revealedCount - 1 - i).map((idx) => {
                 const song = puzzle.songs[idx];
-                const justRevealed = idx === revealedCount - 1 && isActive;
+                const justRevealed = idx === revealedCount - 1 && (isActive || gameState === "preview");
                 const wasWinningSong = gameState === "won" && idx === songsUsed - 1;
 
                 return (
