@@ -3,15 +3,18 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq, asc, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
+import { unstable_noStore as noStore } from "next/cache";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const sqlClient = neon(process.env.DATABASE_URL!);
 const db = drizzle(sqlClient, { schema });
 
 export async function GET() {
+  noStore();
+
   try {
-    // Pick a random published puzzle
     const puzzle = await db
       .select()
       .from(schema.puzzles)
@@ -24,7 +27,6 @@ export async function GET() {
       return NextResponse.json({ error: "No puzzle found" }, { status: 404 });
     }
 
-    // Get the songs in reveal order — song name only
     const songRows = await db
       .select({
         displayOrder: schema.puzzleSongs.displayOrder,
@@ -35,7 +37,6 @@ export async function GET() {
       .where(eq(schema.puzzleSongs.puzzleId, puzzle.id))
       .orderBy(asc(schema.puzzleSongs.displayOrder));
 
-    // Get the answer (artist name for artist mode)
     let answer = "";
     let answerNormalized = "";
     if (puzzle.artistId) {
@@ -50,18 +51,25 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({
-      id: puzzle.id,
-      mode: puzzle.mode,
-      genre: puzzle.primaryGenre,
-      songs: songRows.map((s) => ({
-        order: s.displayOrder,
-        name: s.songName,
-      })),
-      answer,
-      answerNormalized,
-      totalSongs: songRows.length,
-    });
+    return NextResponse.json(
+      {
+        id: puzzle.id,
+        mode: puzzle.mode,
+        genre: puzzle.primaryGenre,
+        songs: songRows.map((s) => ({
+          order: s.displayOrder,
+          name: s.songName,
+        })),
+        answer,
+        answerNormalized,
+        totalSongs: songRows.length,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error) {
     console.error("Puzzle API error:", error);
     return NextResponse.json(
