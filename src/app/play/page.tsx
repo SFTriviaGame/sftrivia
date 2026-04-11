@@ -70,9 +70,9 @@ function isCorrectGuess(guess: string, answer: string): boolean {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const TIMER_SECONDS = 45;
+const TIMER_SECONDS = 60;
 const GRACE_SECONDS = 4;
-const REVEAL_INTERVAL = 2;
+const REVEAL_INTERVAL = 4;
 const SCORE_MAX = 1000;
 const SCORE_FLOOR = 50;
 const WRONG_PENALTY = 50;
