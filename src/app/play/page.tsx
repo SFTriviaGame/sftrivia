@@ -13,10 +13,12 @@ interface PuzzleData {
   id: string;
   mode: string;
   genre: string;
+  tags: string[];
   songs: PuzzleSong[];
   answer: string;
   answerNormalized: string;
   totalSongs: number;
+  availableTags: string[];
 }
 
 type GameState = "loading" | "ready" | "playing" | "grace" | "won" | "lost";
@@ -76,17 +78,19 @@ const SCORE_FLOOR = 50;
 const WRONG_PENALTY = 50;
 const DECAY_PER_SECOND = (SCORE_MAX - SCORE_FLOOR) / TIMER_SECONDS;
 
-/*
-  WCAG AA contrast ratios verified against #FAFAF8 background:
-  - #1a1a1a  (primary text)     → 17.4:1 ✓
-  - #4a4a4a  (secondary text)   →  8.6:1 ✓
-  - #6b6b6b  (tertiary text)    →  5.3:1 ✓
-  - #9a6400  (amber accent)     →  4.7:1 ✓ (normal text)
-  - #b45309  (amber buttons)    →  4.6:1 ✓ (large text / UI)
-  - #15803d  (success green)    →  5.2:1 ✓
-  - #b91c1c  (error red)        →  5.7:1 ✓
-  - #8b8b8b  (decorative only)  →  3.5:1 — decorative use only
-*/
+// ── Tag display config ──────────────────────────────────────────────────────
+
+const TAG_LABELS: Record<string, string> = {
+  "all": "All",
+  "70s": "70s",
+  "80s": "80s",
+  "90s": "90s",
+  "pop": "Pop",
+  "classic-rock": "Classic Rock",
+  "hair-metal": "Hair Metal",
+};
+
+const TAG_ORDER = ["all", "70s", "80s", "90s", "pop", "classic-rock", "hair-metal"];
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -123,10 +127,7 @@ const injectedStyles = `
   .animate-score-pop { animation: scorePop 0.3s ease-out; }
 
   @media (prefers-reduced-motion: reduce) {
-    .animate-slide-reveal,
-    .animate-fade-up,
-    .animate-shake,
-    .animate-score-pop {
+    .animate-slide-reveal, .animate-fade-up, .animate-shake, .animate-score-pop {
       animation: none !important;
     }
   }
@@ -134,16 +135,31 @@ const injectedStyles = `
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .hide-scrollbar::-webkit-scrollbar { display: none; }
 
-  /* Focus visible styles for keyboard navigation */
   *:focus-visible {
     outline: 2px solid #b45309;
     outline-offset: 2px;
     border-radius: 4px;
   }
-  input:focus-visible {
-    outline: none;
-  }
+  input:focus-visible { outline: none; }
 `;
+
+// ── LocalStorage helpers ────────────────────────────────────────────────────
+
+function getStoredScore(): { total: number; played: number; won: number } {
+  if (typeof window === "undefined") return { total: 0, played: 0, won: 0 };
+  try {
+    const raw = localStorage.getItem("deepcut_score");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { total: 0, played: 0, won: 0 };
+}
+
+function saveScore(total: number, played: number, won: number) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("deepcut_score", JSON.stringify({ total, played, won }));
+  } catch {}
+}
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -162,30 +178,55 @@ export default function PlayPage() {
   const [songsUsed, setSongsUsed] = useState(0);
   const [scorePop, setScorePop] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selectedTag, setSelectedTag] = useState("all");
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [sessionScore, setSessionScore] = useState({ total: 0, played: 0, won: 0 });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const revealRef = useRef<NodeJS.Timeout | null>(null);
   const songListRef = useRef<HTMLDivElement>(null);
 
-  // ── Load puzzle ─────────────────────────────────────────────────────────
+  // ── Load stored score on mount ──────────────────────────────────────────
 
   useEffect(() => {
-    fetch(`/api/puzzle?t=${Date.now()}`, { cache: "no-store" })
+    setSessionScore(getStoredScore());
+  }, []);
+
+  // ── Fetch puzzle ────────────────────────────────────────────────────────
+
+  const fetchPuzzle = useCallback((tag: string) => {
+    const params = tag && tag !== "all" ? `?tag=${encodeURIComponent(tag)}&t=${Date.now()}` : `?t=${Date.now()}`;
+    return fetch(`/api/puzzle${params}`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
+    })
       .then((r) => r.json())
       .then((data: PuzzleData) => {
         setPuzzle(data);
-        setGameState("ready");
-      })
-      .catch(console.error);
+        if (data.availableTags) setAvailableTags(data.availableTags);
+        return data;
+      });
   }, []);
+
+  // ── Initial load ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetchPuzzle("all")
+      .then(() => setGameState("ready"))
+      .catch(console.error);
+  }, [fetchPuzzle]);
+
+  // ── Start game ──────────────────────────────────────────────────────────
 
   const startGame = () => {
     setGameState("playing");
     setRevealedCount(1);
   };
 
-  const loadNewPuzzle = () => {
+  // ── Load next puzzle (skips intro) ──────────────────────────────────────
+
+  const loadNextPuzzle = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (revealRef.current) clearInterval(revealRef.current);
     setPuzzle(null);
@@ -202,12 +243,34 @@ export default function PlayPage() {
     setSongsUsed(0);
     setScorePop(false);
     setCopied(false);
-    fetch("/api/puzzle", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data: PuzzleData) => {
-        setPuzzle(data);
-        setGameState("ready");
+    fetchPuzzle(selectedTag)
+      .then(() => {
+        setGameState("playing");
+        setRevealedCount(1);
       })
+      .catch(console.error);
+  };
+
+  // ── Change category (goes to start screen) ─────────────────────────────
+
+  const changeCategory = (tag: string) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (revealRef.current) clearInterval(revealRef.current);
+    setSelectedTag(tag);
+    setPuzzle(null);
+    setGameState("loading");
+    setRevealedCount(0);
+    setTimeRemaining(TIMER_SECONDS);
+    setGraceRemaining(GRACE_SECONDS);
+    setGuess("");
+    setWrongGuesses(0);
+    setScore(SCORE_MAX);
+    setFinalScore(0);
+    setWrongFlash(false);
+    setGuessHistory([]);
+    setSongsUsed(0);
+    fetchPuzzle(tag)
+      .then(() => setGameState("ready"))
       .catch(console.error);
   };
 
@@ -268,6 +331,21 @@ export default function PlayPage() {
     }
   }, [timeRemaining, wrongGuesses, gameState]);
 
+  // ── Track score on game end ─────────────────────────────────────────────
+
+  useEffect(() => {
+    if (gameState === "won" || gameState === "lost") {
+      const prev = getStoredScore();
+      const updated = {
+        total: prev.total + (gameState === "won" ? finalScore : 0),
+        played: prev.played + 1,
+        won: prev.won + (gameState === "won" ? 1 : 0),
+      };
+      saveScore(updated.total, updated.played, updated.won);
+      setSessionScore(updated);
+    }
+  }, [gameState, finalScore]);
+
   // ── Focus ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -286,7 +364,8 @@ export default function PlayPage() {
     if (isCorrectGuess(trimmed, puzzle.answer)) {
       if (timerRef.current) clearInterval(timerRef.current);
       if (revealRef.current) clearInterval(revealRef.current);
-      setFinalScore(gameState === "grace" ? SCORE_FLOOR : score);
+      const earned = gameState === "grace" ? SCORE_FLOOR : score;
+      setFinalScore(earned);
       setSongsUsed(revealedCount);
       setRevealedCount(puzzle.totalSongs);
       setGameState("won");
@@ -330,13 +409,20 @@ export default function PlayPage() {
   const timerPercent = gameState === "grace" ? (graceRemaining / GRACE_SECONDS) * 100
     : gameState === "playing" ? (timeRemaining / TIMER_SECONDS) * 100 : 0;
 
+  // Sorted tags for display
+  const displayTags = ["all", ...availableTags].sort((a, b) => {
+    const ai = TAG_ORDER.indexOf(a);
+    const bi = TAG_ORDER.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
   // ── Loading ─────────────────────────────────────────────────────────────
 
   if (gameState === "loading" || !puzzle) {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="min-h-dvh bg-[#FAFAF8] flex items-center justify-center" role="status" aria-label="Loading puzzle">
+        <main className="min-h-dvh bg-[#FAFAF8] flex items-center justify-center" role="status">
           <p className="font-body text-[#6b6b6b] text-sm tracking-wide">Loading puzzle...</p>
         </main>
       </>
@@ -350,18 +436,63 @@ export default function PlayPage() {
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
         <main className="min-h-dvh bg-[#FAFAF8] flex flex-col items-center justify-center px-6">
-          <div className="animate-fade-up text-center max-w-xs w-full">
+          <div className="animate-fade-up text-center max-w-sm w-full">
             <p className="font-body text-[11px] tracking-[5px] text-[#6b6b6b] uppercase mb-3">
               Daily Puzzle
             </p>
             <h1 className="font-display text-5xl sm:text-6xl text-[#1a1a1a] mb-2 leading-[1.1]">
               Deep Cut
             </h1>
-            <p className="font-display text-lg sm:text-xl text-[#6b6b6b] italic mb-10">
+            <p className="font-display text-lg sm:text-xl text-[#6b6b6b] italic mb-8">
               Name the Artist
             </p>
 
-            <ol className="space-y-3 mb-10 text-left list-none" aria-label="How to play">
+            {/* Running score */}
+            {sessionScore.played > 0 && (
+              <div className="flex justify-center gap-6 mb-8 font-body text-xs text-[#6b6b6b]">
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums">{sessionScore.total.toLocaleString()}</p>
+                  <p>total pts</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums">{sessionScore.won}/{sessionScore.played}</p>
+                  <p>won</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums">
+                    {sessionScore.played > 0 ? Math.round(sessionScore.total / sessionScore.played) : 0}
+                  </p>
+                  <p>avg</p>
+                </div>
+              </div>
+            )}
+
+            {/* Category picker */}
+            <div className="mb-8">
+              <p className="font-body text-[10px] tracking-[3px] text-[#8b8b8b] uppercase mb-3">Category</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {displayTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => {
+                      if (tag !== selectedTag) changeCategory(tag);
+                    }}
+                    className={`
+                      font-body text-xs px-3 py-1.5 rounded-full border transition-all
+                      ${tag === selectedTag
+                        ? "bg-[#b45309] text-white border-[#b45309]"
+                        : "bg-transparent text-[#4a4a4a] border-[#d5d0c7] hover:border-[#b45309] hover:text-[#b45309]"
+                      }
+                    `}
+                  >
+                    {TAG_LABELS[tag] || tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* How to play */}
+            <ol className="space-y-3 mb-8 text-left list-none" aria-label="How to play">
               <li className="flex items-start gap-3">
                 <span className="font-body text-[11px] text-[#9a6400] font-semibold mt-0.5 w-4 text-right shrink-0" aria-hidden="true">01</span>
                 <p className="font-body text-sm text-[#4a4a4a]">Songs reveal one at a time — deep cuts first, hits last</p>
@@ -376,24 +507,17 @@ export default function PlayPage() {
               </li>
             </ol>
 
-            <p className="mb-8">
-              <span className="font-body text-[11px] tracking-[2px] text-[#6b6b6b] uppercase px-3 py-1.5 rounded-full border border-[#e0ddd6]">
-                {puzzle.genre}
-              </span>
-            </p>
-
             <button
               onClick={startGame}
               className="font-body w-full py-3.5 rounded-lg text-sm font-semibold tracking-wide uppercase
                 bg-[#b45309] text-white hover:bg-[#a14a08]
-                active:scale-[0.97] transition-all duration-150
-                focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b45309]"
+                active:scale-[0.97] transition-all duration-150"
             >
               Play
             </button>
 
             <p className="font-body text-xs text-[#8b8b8b] mt-4">
-              {puzzle.totalSongs} clues · 60 seconds
+              {puzzle.totalSongs} clues · {TIMER_SECONDS} seconds
             </p>
           </div>
         </main>
@@ -437,6 +561,14 @@ export default function PlayPage() {
               </div>
             </div>
 
+            {/* Session stats bar */}
+            {sessionScore.played > 0 && (
+              <div className="flex gap-4 mb-2 text-[10px] text-[#8b8b8b]">
+                <span>Session: <strong className="text-[#4a4a4a]">{sessionScore.total.toLocaleString()} pts</strong></span>
+                <span><strong className="text-[#4a4a4a]">{sessionScore.won}/{sessionScore.played}</strong> won</span>
+              </div>
+            )}
+
             {/* Timer bar */}
             <div
               className="w-full h-[3px] bg-[#eae7e0] rounded-full overflow-hidden mb-3"
@@ -479,7 +611,6 @@ export default function PlayPage() {
                     autoCorrect="off"
                     autoCapitalize="off"
                     spellCheck={false}
-                    aria-describedby={wrongFlash ? "wrong-feedback" : undefined}
                     className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-4 py-3 outline-none placeholder:text-[#b0ab9f]"
                   />
                   <button
@@ -494,7 +625,7 @@ export default function PlayPage() {
                   </button>
                 </div>
                 {guessHistory.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 px-1" id="wrong-feedback" role="status" aria-label="Wrong guesses">
+                  <div className="flex flex-wrap gap-1.5 mt-2 px-1" role="status" aria-label="Wrong guesses">
                     {guessHistory.map((g, i) => (
                       <span
                         key={i}
@@ -534,7 +665,7 @@ export default function PlayPage() {
                     {copied ? "Copied!" : "Share"}
                   </button>
                   <button
-                    onClick={loadNewPuzzle}
+                    onClick={loadNextPuzzle}
                     className="text-xs px-4 py-2 rounded-lg bg-[#b45309] text-white font-semibold
                       hover:bg-[#a14a08] active:scale-95 transition-all"
                   >
@@ -568,9 +699,8 @@ export default function PlayPage() {
               </div>
             </div>
 
-            {/* Songs — newest clue at top, pushing older ones down */}
+            {/* Songs — newest clue at top */}
             <ol className="space-y-1 list-none" aria-label="Song clues">
-              {/* Revealed songs in reverse order (newest first) */}
               {Array.from({ length: revealedCount }, (_, i) => revealedCount - 1 - i).map((idx) => {
                 const song = puzzle.songs[idx];
                 const justRevealed = idx === revealedCount - 1 && isActive;
@@ -588,10 +718,7 @@ export default function PlayPage() {
                     `}
                     aria-label={`Clue ${idx + 1}: ${song.name}`}
                   >
-                    <span
-                      className="text-[11px] font-mono w-5 text-right shrink-0 tabular-nums text-[#8b8b8b]"
-                      aria-hidden="true"
-                    >
+                    <span className="text-[11px] font-mono w-5 text-right shrink-0 tabular-nums text-[#8b8b8b]" aria-hidden="true">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
                     <p className={`text-[14px] leading-snug ${wasWinningSong ? "text-[#15803d] font-medium" : "text-[#4a4a4a]"}`}>
@@ -600,7 +727,6 @@ export default function PlayPage() {
                   </li>
                 );
               })}
-              {/* Unrevealed placeholders */}
               {puzzle.songs.slice(revealedCount).map((_, i) => {
                 const originalIndex = revealedCount + i;
                 return (

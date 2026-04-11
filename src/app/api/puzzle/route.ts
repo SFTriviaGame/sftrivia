@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq, asc, sql } from "drizzle-orm";
+import { eq, asc, sql, and } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { unstable_noStore as noStore } from "next/cache";
 
@@ -11,14 +11,23 @@ export const revalidate = 0;
 const sqlClient = neon(process.env.DATABASE_URL!);
 const db = drizzle(sqlClient, { schema });
 
-export async function GET() {
+export async function GET(request: Request) {
   noStore();
 
   try {
+    const { searchParams } = new URL(request.url);
+    const tag = searchParams.get("tag");
+
+    // Build query conditions
+    const conditions = [eq(schema.puzzles.published, true)];
+    if (tag) {
+      conditions.push(sql`${tag} = ANY(${schema.puzzles.tags})`);
+    }
+
     const puzzle = await db
       .select()
       .from(schema.puzzles)
-      .where(eq(schema.puzzles.published, true))
+      .where(and(...conditions))
       .orderBy(sql`RANDOM()`)
       .limit(1)
       .then((rows) => rows[0]);
@@ -51,11 +60,23 @@ export async function GET() {
       }
     }
 
+    // Get available tags for the category picker
+    const allTags = await db
+      .select({ tags: schema.puzzles.tags })
+      .from(schema.puzzles)
+      .where(eq(schema.puzzles.published, true));
+
+    const tagSet = new Set<string>();
+    allTags.forEach((row) => {
+      if (row.tags) row.tags.forEach((t) => { if (t) tagSet.add(t); });
+    });
+
     return NextResponse.json(
       {
         id: puzzle.id,
         mode: puzzle.mode,
         genre: puzzle.primaryGenre,
+        tags: puzzle.tags || [],
         songs: songRows.map((s) => ({
           order: s.displayOrder,
           name: s.songName,
@@ -63,6 +84,7 @@ export async function GET() {
         answer,
         answerNormalized,
         totalSongs: songRows.length,
+        availableTags: Array.from(tagSet).sort(),
       },
       {
         headers: {

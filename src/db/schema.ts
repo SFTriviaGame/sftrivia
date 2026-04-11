@@ -22,6 +22,7 @@ export const gameConfig = pgTable("game_config", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  tags: text("tags").array().default(sql`'{}'`),
 });
 
 // ============================================================================
