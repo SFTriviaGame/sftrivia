@@ -70,7 +70,7 @@ function isCorrectGuess(guess: string, answer: string): boolean {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const TIMER_SECONDS = 45;
+const TIMER_SECONDS = 30;
 const GRACE_SECONDS = 3;
 const REVEAL_INTERVAL = 3;
 const PREVIEW_SECONDS = 3;
@@ -146,19 +146,19 @@ const injectedStyles = `
 
 // ── LocalStorage helpers ────────────────────────────────────────────────────
 
-function getStoredScore(): { total: number; played: number; won: number } {
-  if (typeof window === "undefined") return { total: 0, played: 0, won: 0 };
+function getStoredScore(): { total: number; played: number; won: number; streak: number } {
+  if (typeof window === "undefined") return { total: 0, played: 0, won: 0, streak: 0 };
   try {
     const raw = localStorage.getItem("deepcut_score");
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { total: 0, played: 0, won: 0 };
+  return { total: 0, played: 0, won: 0, streak: 0 };
 }
 
-function saveScore(total: number, played: number, won: number) {
+function saveScore(total: number, played: number, won: number, streak: number) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem("deepcut_score", JSON.stringify({ total, played, won }));
+    localStorage.setItem("deepcut_score", JSON.stringify({ total, played, won, streak }));
   } catch {}
 }
 
@@ -181,7 +181,7 @@ export default function PlayPage() {
   const [copied, setCopied] = useState(false);
   const [selectedTag, setSelectedTag] = useState("all");
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [sessionScore, setSessionScore] = useState({ total: 0, played: 0, won: 0 });
+  const [sessionScore, setSessionScore] = useState({ total: 0, played: 0, won: 0, streak: 0 });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -349,8 +349,9 @@ export default function PlayPage() {
         total: prev.total + (gameState === "won" ? finalScore : 0),
         played: prev.played + 1,
         won: prev.won + (gameState === "won" ? 1 : 0),
+        streak: gameState === "won" ? prev.streak + 1 : 0,
       };
-      saveScore(updated.total, updated.played, updated.won);
+      saveScore(updated.total, updated.played, updated.won, updated.streak);
       setSessionScore(updated);
     }
   }, [gameState, finalScore]);
@@ -391,6 +392,16 @@ export default function PlayPage() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") { e.preventDefault(); handleGuess(); }
+  };
+
+  const giveUp = () => {
+    if (!puzzle) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (revealRef.current) clearInterval(revealRef.current);
+    setFinalScore(0);
+    setSongsUsed(revealedCount);
+    setRevealedCount(puzzle.totalSongs);
+    setGameState("lost");
   };
 
   // ── Share ───────────────────────────────────────────────────────────────
@@ -473,6 +484,10 @@ export default function PlayPage() {
                     {sessionScore.played > 0 ? Math.round(sessionScore.total / sessionScore.played) : 0}
                   </p>
                   <p>avg</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums">{sessionScore.streak}</p>
+                  <p>streak</p>
                 </div>
               </div>
             )}
@@ -590,6 +605,9 @@ export default function PlayPage() {
               <div className="flex gap-4 mb-2 text-[10px] text-[#8b8b8b]">
                 <span>Session: <strong className="text-[#4a4a4a]">{sessionScore.total.toLocaleString()} pts</strong></span>
                 <span><strong className="text-[#4a4a4a]">{sessionScore.won}/{sessionScore.played}</strong> won</span>
+                {sessionScore.streak > 1 && (
+                  <span><strong className="text-[#b45309]">{sessionScore.streak}</strong> streak</span>
+                )}
               </div>
             )}
 
@@ -665,6 +683,12 @@ export default function PlayPage() {
                     ))}
                   </div>
                 )}
+                <button
+                  onClick={giveUp}
+                  className="text-[10px] text-[#8b8b8b] hover:text-[#b91c1c] mt-2 transition-colors"
+                >
+                  Give up
+                </button>
               </div>
             )}
 
