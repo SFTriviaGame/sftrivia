@@ -251,9 +251,8 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (!songListRef.current) return;
-    const items = songListRef.current.querySelectorAll("[data-song]");
-    if (items.length > 0 && revealedCount > 0 && revealedCount <= items.length) {
-      (items[revealedCount - 1] as HTMLElement)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (revealedCount > 0) {
+      songListRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [revealedCount]);
 
@@ -569,42 +568,51 @@ export default function PlayPage() {
               </div>
             </div>
 
-            {/* Songs */}
+            {/* Songs — newest clue at top, pushing older ones down */}
             <ol className="space-y-1 list-none" aria-label="Song clues">
-              {puzzle.songs.map((song, i) => {
-                const revealed = i < revealedCount;
-                const justRevealed = i === revealedCount - 1 && isActive;
-                const wasWinningSong = gameState === "won" && i === songsUsed - 1;
+              {/* Revealed songs in reverse order (newest first) */}
+              {Array.from({ length: revealedCount }, (_, i) => revealedCount - 1 - i).map((idx) => {
+                const song = puzzle.songs[idx];
+                const justRevealed = idx === revealedCount - 1 && isActive;
+                const wasWinningSong = gameState === "won" && idx === songsUsed - 1;
 
                 return (
                   <li
-                    key={i}
+                    key={idx}
                     data-song
                     className={`
                       flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300
-                      ${revealed ? "bg-white shadow-sm animate-slide-reveal" : "opacity-40"}
+                      bg-white shadow-sm animate-slide-reveal
                       ${justRevealed ? "ring-1 ring-[#b45309]/25" : ""}
                       ${wasWinningSong ? "ring-1 ring-[#15803d]/30 bg-[#f0fdf4]" : ""}
                     `}
-                    aria-label={revealed ? `Clue ${i + 1}: ${song.name}` : `Clue ${i + 1}: not yet revealed`}
+                    aria-label={`Clue ${idx + 1}: ${song.name}`}
                   >
                     <span
-                      className={`text-[11px] font-mono w-5 text-right shrink-0 tabular-nums ${revealed ? "text-[#8b8b8b]" : "text-[#d5d0c7]"}`}
+                      className="text-[11px] font-mono w-5 text-right shrink-0 tabular-nums text-[#8b8b8b]"
                       aria-hidden="true"
                     >
-                      {String(i + 1).padStart(2, "0")}
+                      {String(idx + 1).padStart(2, "0")}
                     </span>
-                    {revealed ? (
-                      <p className={`text-[14px] leading-snug ${wasWinningSong ? "text-[#15803d] font-medium" : "text-[#4a4a4a]"}`}>
-                        {song.name}
-                      </p>
-                    ) : (
-                      <div
-                        className="h-[10px] rounded bg-[#eae7e0]"
-                        style={{ width: `${35 + ((i * 17) % 45)}%` }}
-                        aria-hidden="true"
-                      />
-                    )}
+                    <p className={`text-[14px] leading-snug ${wasWinningSong ? "text-[#15803d] font-medium" : "text-[#4a4a4a]"}`}>
+                      {song.name}
+                    </p>
+                  </li>
+                );
+              })}
+              {/* Unrevealed placeholders */}
+              {puzzle.songs.slice(revealedCount).map((_, i) => {
+                const originalIndex = revealedCount + i;
+                return (
+                  <li
+                    key={`unrevealed-${originalIndex}`}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg opacity-40"
+                    aria-label={`Clue ${originalIndex + 1}: not yet revealed`}
+                  >
+                    <span className="text-[11px] font-mono w-5 text-right shrink-0 tabular-nums text-[#d5d0c7]" aria-hidden="true">
+                      {String(originalIndex + 1).padStart(2, "0")}
+                    </span>
+                    <div className="h-[10px] rounded bg-[#eae7e0]" style={{ width: `${35 + ((originalIndex * 17) % 45)}%` }} aria-hidden="true" />
                   </li>
                 );
               })}
