@@ -171,7 +171,7 @@ export default function PlayPage() {
   // ── Load puzzle ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetch("/api/puzzle", { cache: "no-store" })
+    fetch(`/api/puzzle?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data: PuzzleData) => {
         setPuzzle(data);
