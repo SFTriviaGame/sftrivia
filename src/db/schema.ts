@@ -22,7 +22,6 @@ export const gameConfig = pgTable("game_config", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-  tags: text("tags").array().default(sql`'{}'`),
 });
 
 // ============================================================================
@@ -263,6 +262,7 @@ export const puzzles = pgTable(
     flaggedAt: timestamp("flagged_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+    tags: text("tags").array().default(sql`'{}'`),
   },
   (table) => [
     index("idx_puzzles_mode").on(table.mode),
