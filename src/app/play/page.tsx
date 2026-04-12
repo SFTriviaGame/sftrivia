@@ -20,7 +20,7 @@ interface PuzzleData {
   availableTags: string[];
 }
 
-type GameState = "loading" | "ready" | "preview" | "playing" | "grace" | "won" | "lost";
+type GameState = "loading" | "ready" | "preview" | "playing" | "grace" | "won" | "lost" | "exhausted";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -93,9 +93,14 @@ const injectedStyles = `
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 
   .animate-slide-reveal { animation: slideReveal 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
   .animate-fade-up { animation: fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .animate-fade-in { animation: fadeIn 0.3s ease-out both; }
   .animate-shake { animation: shakeX 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
   .animate-score-pop { animation: scorePop 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
   .animate-dot-pulse { animation: dotPulse 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
@@ -103,7 +108,7 @@ const injectedStyles = `
   .animate-timer-pulse { animation: timerPulse 1s ease-in-out infinite; }
 
   @media (prefers-reduced-motion: reduce) {
-    .animate-slide-reveal, .animate-fade-up, .animate-shake,
+    .animate-slide-reveal, .animate-fade-up, .animate-fade-in, .animate-shake,
     .animate-score-pop, .animate-dot-pulse, .animate-result-reveal,
     .animate-timer-pulse {
       animation: none !important;
@@ -186,7 +191,10 @@ export default function PlayPage() {
       cache: "no-store",
       headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (r.status === 404) throw new Error("exhausted");
+        return r.json();
+      })
       .then((data: PuzzleData) => {
         setPuzzle(data);
         if (data.availableTags) setAvailableTags(data.availableTags);
@@ -226,7 +234,10 @@ export default function PlayPage() {
   useEffect(() => {
     fetchPuzzle("all")
       .then(() => setGameState("ready"))
-      .catch(console.error);
+      .catch((err) => {
+        if (err.message === "exhausted") setGameState("exhausted");
+        else console.error(err);
+      });
   }, [fetchPuzzle]);
 
   // ── Start game (goes through preview) ───────────────────────────────────
@@ -273,7 +284,13 @@ export default function PlayPage() {
         setLatestDotIndex(0);
         setGameState("preview");
       })
-      .catch(console.error);
+      .catch((err) => {
+        if (err.message === "exhausted") {
+          setGameState("exhausted");
+        } else {
+          console.error(err);
+        }
+      });
   };
 
   // ── Change category ─────────────────────────────────────────────────────
@@ -300,7 +317,10 @@ export default function PlayPage() {
     setPlayedArtistIds([]);
     fetchPuzzle(tag)
       .then(() => setGameState("ready"))
-      .catch(console.error);
+      .catch((err) => {
+        if (err.message === "exhausted") setGameState("exhausted");
+        else console.error(err);
+      });
   };
 
   // ── Timers ──────────────────────────────────────────────────────────────
@@ -423,7 +443,10 @@ export default function PlayPage() {
         setWrongGuesses((prev) => prev + 1);
         setGuess("");
         setWrongFlash(true);
-        setTimeout(() => setWrongFlash(false), 500);
+        setTimeout(() => {
+          setWrongFlash(false);
+          inputRef.current?.focus();
+        }, 500);
       }
     } catch {
       console.error("Validation request failed");
@@ -478,6 +501,83 @@ export default function PlayPage() {
     const bi = TAG_ORDER.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
+
+  // ── Exhausted — no more puzzles in this category ─────────────────────
+
+  if (gameState === "exhausted") {
+    const otherTags = displayTags.filter((t) => t !== selectedTag);
+
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
+        <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
+          <div className="animate-fade-up text-center max-w-sm w-full">
+            <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
+              🎉 Nice work
+            </p>
+            <h1 className="font-display text-3xl sm:text-4xl text-[#1a1a1a] mb-2 leading-tight">
+              You played them all
+            </h1>
+            <p className="font-body text-sm text-[#6b6b6b] mb-8">
+              {selectedTag === "all"
+                ? "Every artist in the catalog. Impressive."
+                : `No more ${TAG_LABELS[selectedTag] || selectedTag} puzzles left this session.`}
+            </p>
+
+            {sessionScore.played > 0 && (
+              <div className="flex justify-center gap-5 mb-8 font-body text-xs text-[#8b8b8b]">
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
+                  <p className="text-[10px]">total pts</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.won}/{sessionScore.played}</p>
+                  <p className="text-[10px]">won</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">
+                    {Math.round(sessionScore.total / sessionScore.played)}
+                  </p>
+                  <p className="text-[10px]">avg</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.streak}</p>
+                  <p className="text-[10px]">streak</p>
+                </div>
+              </div>
+            )}
+
+            {selectedTag !== "all" && (
+              <div className="mb-6">
+                <p className="font-body text-[10px] tracking-[3px] text-[#8b8b8b] uppercase mb-2.5">Try another category</p>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {otherTags.map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => changeCategory(tag)}
+                      className="font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200
+                        bg-transparent text-[#4a4a4a] border-[#d5d0c7] hover:border-[#b45309] hover:text-[#b45309] active:scale-95"
+                    >
+                      {TAG_LABELS[tag] || tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => changeCategory("all")}
+              className="font-body w-full py-3 rounded-lg text-sm font-semibold tracking-wide uppercase
+                bg-[#b45309] text-white hover:bg-[#a14a08]
+                active:scale-[0.97] transition-all duration-150 shadow-sm"
+            >
+              {selectedTag === "all" ? "Start Fresh" : "Play All Categories"}
+            </button>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   // ── Loading ─────────────────────────────────────────────────────────────
 
@@ -597,7 +697,7 @@ export default function PlayPage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-      <div className="fixed inset-0 bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-hidden">
+      <div className="fixed inset-0 bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-hidden animate-fade-in">
 
         {/* ── Compact sticky header ─────────────────────────────────────── */}
         <header className="shrink-0 z-10 bg-[#FAFAF8] border-b border-[#e8e5de]">
@@ -613,6 +713,17 @@ export default function PlayPage() {
                 >
                   ← Menu
                 </button>
+                {canGuess && (
+                  <>
+                    <span className="text-[10px] text-[#d5d0c7]">·</span>
+                    <button
+                      onClick={giveUp}
+                      className="text-[10px] text-[#8b8b8b] hover:text-[#b91c1c] transition-colors"
+                    >
+                      Give up
+                    </button>
+                  </>
+                )}
                 {selectedTag !== "all" && (
                   <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">
                     {TAG_LABELS[selectedTag] || selectedTag}
@@ -693,8 +804,7 @@ export default function PlayPage() {
                     autoCorrect="off"
                     autoCapitalize="off"
                     spellCheck={false}
-                    disabled={validating}
-                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#b0ab9f] disabled:opacity-60"
+                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#b0ab9f]"
                   />
                   <button
                     type="submit"
@@ -720,13 +830,6 @@ export default function PlayPage() {
                     ))}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={giveUp}
-                  className="text-[10px] text-[#8b8b8b] hover:text-[#b91c1c] mt-1 transition-colors"
-                >
-                  Give up
-                </button>
               </form>
             )}
           </div>
@@ -868,8 +971,8 @@ export default function PlayPage() {
 
         {/* ── Sticky bottom bar — result actions ────────────────────────── */}
         {isFinished && (
-          <div className="shrink-0 z-10 bg-[#FAFAF8] border-t border-[#e8e5de]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-            <div className="max-w-lg mx-auto px-4 py-2 flex gap-2">
+          <div className="shrink-0 z-10 bg-[#FAFAF8] border-t border-[#e8e5de]" style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
+            <div className="max-w-lg mx-auto px-4 pt-2 pb-0 flex gap-2">
               <button
                 onClick={handleShare}
                 className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
