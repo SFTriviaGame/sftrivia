@@ -6,6 +6,8 @@ html {
   color-scheme: light;
   overflow-x: hidden;
   overscroll-behavior-x: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -13,4 +15,28 @@ body {
   overscroll-behavior-x: none;
   position: relative;
   width: 100%;
+}
+
+/* Ensure sr-only skip link becomes visible on focus */
+.sr-only:focus,
+.sr-only:focus-visible {
+  position: absolute !important;
+  width: auto !important;
+  height: auto !important;
+  clip: auto !important;
+  clip-path: none !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+}
+
+/* Reduced motion: disable all transitions too */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

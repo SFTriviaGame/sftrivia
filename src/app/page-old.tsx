@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 const injectedStyles = `
-  .font-display { font-family: var(--font-display), Georgia, serif; }
-  .font-body { font-family: var(--font-body), system-ui, sans-serif; }
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
+  .font-display { font-family: 'Instrument Serif', Georgia, serif; }
+  .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
@@ -50,10 +52,7 @@ export default function HomePage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-      <main
-        id="main-content"
-        className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto overflow-x-hidden"
-      >
+      <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto overflow-x-hidden">
         <div className="text-center max-w-md w-full">
 
           {/* Branding */}
@@ -63,14 +62,14 @@ export default function HomePage() {
           <h1 className="font-display text-6xl sm:text-7xl text-[#1a1a1a] mb-2 leading-[1] stagger-2">
             Deep Cut
           </h1>
-          <p className="font-display text-xl sm:text-2xl text-[#737373] italic mb-10 stagger-3">
+          <p className="font-display text-xl sm:text-2xl text-[#8b8b8b] italic mb-10 stagger-3">
             Name the Artist
           </p>
 
           {/* Game preview — visual hint of the mechanic */}
-          <div className="max-w-xs mx-auto mb-10 stagger-4" aria-hidden="true">
+          <div className="max-w-xs mx-auto mb-10 stagger-4">
             <div className="flex items-center gap-2 mb-2 px-1">
-              <p className="text-[9px] tracking-[3px] text-[#737373] uppercase font-body">Clues</p>
+              <p className="text-[9px] tracking-[3px] text-[#8b8b8b] uppercase font-body">Clues</p>
               <div className="flex gap-[3px]">
                 {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                   <div
@@ -93,7 +92,7 @@ export default function HomePage() {
               >
                 <span
                   className="text-[10px] font-mono w-4 text-right shrink-0 tabular-nums"
-                  style={{ color: i === 0 ? "#b45309" : "#8a8580" }}
+                  style={{ color: i === 0 ? "#b45309" : "#b0ab9f" }}
                 >
                   {clue.num}
                 </span>
@@ -106,7 +105,7 @@ export default function HomePage() {
           </div>
 
           {/* How it works */}
-          <p className="font-body text-sm text-[#4a4a4a] leading-relaxed mb-8 max-w-[280px] mx-auto stagger-5">
+          <p className="font-body text-sm text-[#6b6b6b] leading-relaxed mb-8 max-w-[280px] mx-auto stagger-5">
             Songs reveal one at a time — deep cuts first, hits last. Guess the artist before time runs out.
           </p>
 
@@ -120,7 +119,7 @@ export default function HomePage() {
             >
               Play
             </Link>
-            <p className="font-body text-[11px] text-[#737373] mt-3">
+            <p className="font-body text-[11px] text-[#b0ab9f] mt-3">
               Free · No signup required
             </p>
           </div>

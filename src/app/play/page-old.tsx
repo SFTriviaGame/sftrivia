@@ -37,24 +37,24 @@ const DECAY_PER_SECOND = (SCORE_MAX - SCORE_FLOOR) / TIMER_SECONDS;
 
 const TAG_LABELS: Record<string, string> = {
   "all": "All",
-  "60s": "60s",
   "70s": "70s",
   "80s": "80s",
   "90s": "90s",
   "2000s": "2000s",
-  "2010s": "2010s",
   "pop": "Pop",
   "classic-rock": "Classic Rock",
   "hair-metal": "Hair Metal",
 };
 
-const TAG_ORDER = ["all", "60s", "70s", "80s", "90s", "2000s", "2010s", "pop", "classic-rock", "hair-metal"];
+const TAG_ORDER = ["all", "70s", "80s", "90s", "2000s", "pop", "classic-rock", "hair-metal"];
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
 const injectedStyles = `
-  .font-display { font-family: var(--font-display), Georgia, serif; }
-  .font-body { font-family: var(--font-body), system-ui, sans-serif; }
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
+  .font-display { font-family: 'Instrument Serif', Georgia, serif; }
+  .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
   @keyframes slideReveal {
     0% { opacity: 0; transform: translateX(-12px) scale(0.98); }
@@ -516,9 +516,9 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
+        <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
-            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">
+            <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
               🎉 Nice work
             </p>
             <h1 className="font-display text-3xl sm:text-4xl text-[#1a1a1a] mb-2 leading-tight">
@@ -531,7 +531,7 @@ export default function PlayPage() {
             </p>
 
             {sessionScore.played > 0 && (
-              <div className="flex justify-center gap-5 mb-8 font-body text-xs text-[#737373]">
+              <div className="flex justify-center gap-5 mb-8 font-body text-xs text-[#8b8b8b]">
                 <div>
                   <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
                   <p className="text-[10px]">total pts</p>
@@ -555,7 +555,7 @@ export default function PlayPage() {
 
             {selectedTag !== "all" && (
               <div className="mb-6">
-                <p className="font-body text-[10px] tracking-[3px] text-[#737373] uppercase mb-2.5">Try another category</p>
+                <p className="font-body text-[10px] tracking-[3px] text-[#8b8b8b] uppercase mb-2.5">Try another category</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {otherTags.map((tag) => (
                     <button
@@ -591,10 +591,10 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center" role="status">
+        <main className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center" role="status">
           <div className="animate-fade-up text-center">
             <p className="font-display text-2xl text-[#1a1a1a] mb-1">Deep Cut</p>
-            <p className="font-body text-[#737373] text-xs tracking-widest uppercase">Loading...</p>
+            <p className="font-body text-[#8b8b8b] text-xs tracking-widest uppercase">Loading...</p>
           </div>
         </main>
       </>
@@ -607,20 +607,20 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
+        <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
-            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">
+            <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
               Daily Puzzle
             </p>
             <h1 className="font-display text-5xl sm:text-6xl text-[#1a1a1a] mb-1 leading-[1.05]">
               Deep Cut
             </h1>
-            <p className="font-display text-lg text-[#737373] italic mb-7">
+            <p className="font-display text-lg text-[#8b8b8b] italic mb-7">
               Name the Artist
             </p>
 
             {sessionScore.played > 0 && (
-              <div className="flex justify-center gap-5 mb-7 font-body text-xs text-[#737373]">
+              <div className="flex justify-center gap-5 mb-7 font-body text-xs text-[#8b8b8b]">
                 <div>
                   <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
                   <p className="text-[10px]">total pts</p>
@@ -643,15 +643,14 @@ export default function PlayPage() {
             )}
 
             <div className="mb-7">
-              <p className="font-body text-[10px] tracking-[3px] text-[#737373] uppercase mb-2.5" id="category-label">Category</p>
-              <div className="flex flex-wrap justify-center gap-1.5" role="group" aria-labelledby="category-label">
+              <p className="font-body text-[10px] tracking-[3px] text-[#8b8b8b] uppercase mb-2.5">Category</p>
+              <div className="flex flex-wrap justify-center gap-1.5">
                 {displayTags.map((tag) => (
                   <button
                     key={tag}
                     onClick={() => {
                       if (tag !== selectedTag) changeCategory(tag);
                     }}
-                    aria-pressed={tag === selectedTag}
                     className={`
                       font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200
                       ${tag === selectedTag
@@ -690,7 +689,7 @@ export default function PlayPage() {
               Play
             </button>
 
-            <p className="font-body text-[11px] text-[#737373] mt-3">
+            <p className="font-body text-[11px] text-[#8b8b8b] mt-3">
               {puzzle.totalSongs} clues · {TIMER_SECONDS}s
             </p>
           </div>
@@ -715,18 +714,17 @@ export default function PlayPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => changeCategory(selectedTag)}
-                  className="text-[10px] text-[#737373] hover:text-[#4a4a4a] transition-colors"
+                  className="text-[10px] text-[#8b8b8b] hover:text-[#4a4a4a] transition-colors"
                   aria-label="Back to menu"
                 >
-                  <span aria-hidden="true">← </span>Menu
+                  ← Menu
                 </button>
                 {canGuess && (
                   <>
-                    <span className="text-[10px] text-[#a09a90]" aria-hidden="true">·</span>
+                    <span className="text-[10px] text-[#d5d0c7]">·</span>
                     <button
                       onClick={giveUp}
-                      className="text-[10px] text-[#737373] hover:text-[#b91c1c] transition-colors"
-                      aria-label="Give up on this puzzle"
+                      className="text-[10px] text-[#8b8b8b] hover:text-[#b91c1c] transition-colors"
                     >
                       Give up
                     </button>
@@ -743,14 +741,14 @@ export default function PlayPage() {
                   className={`text-2xl font-bold tabular-nums leading-none transition-colors duration-300 ${scorePop ? "animate-score-pop" : ""}`}
                   style={{
                     color: isFinished
-                      ? gameState === "won" ? "#15803d" : "#737373"
+                      ? gameState === "won" ? "#15803d" : "#8b8b8b"
                       : isUrgent ? "#b91c1c" : "#1a1a1a",
                   }}
                   aria-label={`Score: ${isFinished ? finalScore : score}`}
                 >
                   {isFinished ? finalScore : score}
                 </p>
-                <p className="text-[10px] leading-none" style={{ color: isUrgent && (isActive || gameState === "preview") ? "#b91c1c" : "#737373" }}>
+                <p className="text-[10px] leading-none" style={{ color: isUrgent && (isActive || gameState === "preview") ? "#b91c1c" : "#8b8b8b" }}>
                   {gameState === "preview" && <span className="text-[#b45309]">ready</span>}
                   {gameState === "grace" && <span className="animate-timer-pulse">GRACE {graceRemaining}s</span>}
                   {gameState === "playing" && <span>{timeRemaining}s</span>}
@@ -812,7 +810,7 @@ export default function PlayPage() {
                     autoCorrect="off"
                     autoCapitalize="off"
                     spellCheck={false}
-                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#8a8580]"
+                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#b0ab9f]"
                   />
                   <button
                     type="submit"
@@ -845,7 +843,6 @@ export default function PlayPage() {
 
         {/* ── Song list ─────────────────────────────────────────────────── */}
         <main
-          id="main-content"
           className="flex-1 overflow-y-auto hide-scrollbar"
           ref={songListRef}
         >
@@ -886,7 +883,7 @@ export default function PlayPage() {
 
             {/* Dot progress */}
             <div className="flex items-center gap-2 mb-2.5 px-0.5">
-              <p className="text-[9px] tracking-[3px] text-[#737373] uppercase" aria-hidden="true">Clues</p>
+              <p className="text-[9px] tracking-[3px] text-[#8b8b8b] uppercase" aria-hidden="true">Clues</p>
               <div className="flex gap-[3px]" role="img" aria-label={`${revealedCount} of ${puzzle.totalSongs} clues revealed`}>
                 {puzzle.songs.map((_, i) => {
                   const isRevealed = i < revealedCount;
@@ -940,7 +937,7 @@ export default function PlayPage() {
                       style={{
                         color: wasWinningSong ? "#15803d"
                           : justRevealed ? "#b45309"
-                          : "#8a8580",
+                          : "#b0ab9f",
                       }}
                       aria-hidden="true"
                     >
@@ -984,19 +981,17 @@ export default function PlayPage() {
             <div className="max-w-lg mx-auto px-4 pt-2 pb-0 flex gap-2">
               <button
                 onClick={handleShare}
-                aria-label={copied ? "Copied to clipboard" : "Share your result"}
                 className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
-                  hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
+                  hover:border-[#b0ab9f] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
               >
                 {copied ? "Copied!" : "Share"}
               </button>
               <button
                 onClick={loadNextPuzzle}
-                aria-label="Next puzzle"
                 className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold
                   hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm"
               >
-                Next <span aria-hidden="true">→</span>
+                Next →
               </button>
             </div>
           </div>

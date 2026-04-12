@@ -53,8 +53,10 @@ const TAG_ORDER = ["all", "60s", "70s", "80s", "90s", "2000s", "2010s", "pop", "
 // ── Styles ──────────────────────────────────────────────────────────────────
 
 const injectedStyles = `
-  .font-display { font-family: var(--font-display), Georgia, serif; }
-  .font-body { font-family: var(--font-body), system-ui, sans-serif; }
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
+  .font-display { font-family: 'Instrument Serif', Georgia, serif; }
+  .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
   @keyframes slideReveal {
     0% { opacity: 0; transform: translateX(-12px) scale(0.98); }

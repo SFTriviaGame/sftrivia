@@ -1,0 +1,7 @@
+# Deep Cut — robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Uncomment when deployed:
+# Sitemap: https://your-app.vercel.app/sitemap.xml

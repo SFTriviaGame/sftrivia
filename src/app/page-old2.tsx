@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 const injectedStyles = `
-  .font-display { font-family: var(--font-display), Georgia, serif; }
-  .font-body { font-family: var(--font-body), system-ui, sans-serif; }
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
+  .font-display { font-family: 'Instrument Serif', Georgia, serif; }
+  .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
