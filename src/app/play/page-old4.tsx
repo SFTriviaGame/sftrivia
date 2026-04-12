@@ -579,14 +579,6 @@ export default function PlayPage() {
             >
               {selectedTag === "all" ? "Start Fresh" : "Play All Categories"}
             </button>
-
-            <nav className="mt-8 font-body text-[11px] text-[#737373]" aria-label="Navigation">
-              <a href="/profile" className="hover:text-[#b45309] transition-colors">Profile</a>
-              <span className="mx-2" aria-hidden="true">·</span>
-              <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a>
-              <span className="mx-2" aria-hidden="true">·</span>
-              <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a>
-            </nav>
           </div>
         </main>
       </>
@@ -702,9 +694,7 @@ export default function PlayPage() {
               {puzzle.totalSongs} clues · {TIMER_SECONDS}s
             </p>
 
-            <nav className="mt-10 font-body text-[11px] text-[#737373]" aria-label="Navigation">
-              <a href="/profile" className="hover:text-[#b45309] transition-colors">Profile</a>
-              <span className="mx-2" aria-hidden="true">·</span>
+            <nav className="mt-10 font-body text-[11px] text-[#737373]" aria-label="Legal">
               <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a>
               <span className="mx-2" aria-hidden="true">·</span>
               <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a>
@@ -997,34 +987,23 @@ export default function PlayPage() {
         {/* ── Sticky bottom bar — result actions ────────────────────────── */}
         {isFinished && (
           <div className="shrink-0 z-10 bg-[#FAFAF8] border-t border-[#e8e5de]" style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
-            <div className="max-w-lg mx-auto px-4 pt-2 pb-0">
-              <div className="flex gap-2">
-                <button
-                  onClick={handleShare}
-                  aria-label={copied ? "Copied to clipboard" : "Share your result"}
-                  className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
-                    hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
-                >
-                  {copied ? "Copied!" : "Share"}
-                </button>
-                <a
-                  href="/profile"
-                  aria-label="View your profile"
-                  className="text-sm py-2.5 px-4 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
-                    hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all
-                    flex items-center justify-center"
-                >
-                  Profile
-                </a>
-                <button
-                  onClick={loadNextPuzzle}
-                  aria-label="Next puzzle"
-                  className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold
-                    hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm"
-                >
-                  Next <span aria-hidden="true">→</span>
-                </button>
-              </div>
+            <div className="max-w-lg mx-auto px-4 pt-2 pb-0 flex gap-2">
+              <button
+                onClick={handleShare}
+                aria-label={copied ? "Copied to clipboard" : "Share your result"}
+                className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
+                  hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
+              >
+                {copied ? "Copied!" : "Share"}
+              </button>
+              <button
+                onClick={loadNextPuzzle}
+                aria-label="Next puzzle"
+                className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold
+                  hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm"
+              >
+                Next <span aria-hidden="true">→</span>
+              </button>
             </div>
           </div>
         )}
