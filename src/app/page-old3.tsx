@@ -124,13 +124,6 @@ export default function HomePage() {
               Free · No signup required
             </p>
           </div>
-
-          {/* Footer links */}
-          <nav className="mt-12 font-body text-[11px] text-[#737373] stagger-6" aria-label="Legal">
-            <Link href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</Link>
-            <span className="mx-2" aria-hidden="true">·</span>
-            <Link href="/terms" className="hover:text-[#b45309] transition-colors">Terms</Link>
-          </nav>
         </div>
       </main>
     </>

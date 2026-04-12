@@ -693,12 +693,6 @@ export default function PlayPage() {
             <p className="font-body text-[11px] text-[#737373] mt-3">
               {puzzle.totalSongs} clues · {TIMER_SECONDS}s
             </p>
-
-            <nav className="mt-10 font-body text-[11px] text-[#737373]" aria-label="Legal">
-              <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a>
-              <span className="mx-2" aria-hidden="true">·</span>
-              <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a>
-            </nav>
           </div>
         </main>
       </>
