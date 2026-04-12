@@ -56,9 +56,6 @@ const injectedStyles = `
   .font-display { font-family: 'Instrument Serif', Georgia, serif; }
   .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
-  html, body { overflow-x: hidden; overscroll-behavior-x: none; }
-  body { position: relative; width: 100%; }
-
   @keyframes slideReveal {
     0% { opacity: 0; transform: translateX(-12px) scale(0.98); }
     60% { opacity: 1; transform: translateX(2px) scale(1.005); }

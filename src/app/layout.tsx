@@ -14,8 +14,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Music Trivia",
-  description: "Trivia app for music fun",
+  title: "Deep Cut — Name the Artist",
+  description: "Songs reveal one at a time. Guess the artist. How deep is your knowledge?",
+  viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
 };
 
 export default function RootLayout({
@@ -25,8 +26,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-          <body
-      className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white`}
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#FAFAF8] overflow-x-hidden`}
       >
         {children}
       </body>

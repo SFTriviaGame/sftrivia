@@ -4,4 +4,13 @@
 
 html {
   color-scheme: light;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+body {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  position: relative;
+  width: 100%;
 }
