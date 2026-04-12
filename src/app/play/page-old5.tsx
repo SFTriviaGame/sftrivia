@@ -12,7 +12,6 @@ interface PuzzleSong {
 interface PuzzleData {
   id: string;
   artistId: string;
-  albumId: string;
   mode: string;
   genre: string;
   tags: string[];
@@ -22,7 +21,6 @@ interface PuzzleData {
 }
 
 type GameState = "loading" | "ready" | "preview" | "playing" | "grace" | "won" | "lost" | "exhausted";
-type GameMode = "artist" | "album";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -151,7 +149,6 @@ function saveScore(total: number, played: number, won: number, streak: number) {
 export default function PlayPage() {
   const [puzzle, setPuzzle] = useState<PuzzleData | null>(null);
   const [gameState, setGameState] = useState<GameState>("loading");
-  const [selectedMode, setSelectedMode] = useState<GameMode>("artist");
   const [revealedCount, setRevealedCount] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(TIMER_SECONDS);
   const [graceRemaining, setGraceRemaining] = useState(GRACE_SECONDS);
@@ -168,9 +165,8 @@ export default function PlayPage() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [sessionScore, setSessionScore] = useState({ total: 0, played: 0, won: 0, streak: 0 });
   const [revealedAnswer, setRevealedAnswer] = useState("");
-  const [revealedArtist, setRevealedArtist] = useState("");
   const [validating, setValidating] = useState(false);
-  const [playedSubjectIds, setPlayedSubjectIds] = useState<string[]>([]);
+  const [playedArtistIds, setPlayedArtistIds] = useState<string[]>([]);
   const [latestDotIndex, setLatestDotIndex] = useState(-1);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -186,8 +182,8 @@ export default function PlayPage() {
 
   // ── Fetch puzzle ────────────────────────────────────────────────────────
 
-  const fetchPuzzle = useCallback((tag: string, mode: GameMode, excludeIds: string[] = []) => {
-    const params = new URLSearchParams({ t: String(Date.now()), mode });
+  const fetchPuzzle = useCallback((tag: string, excludeIds: string[] = []) => {
+    const params = new URLSearchParams({ t: String(Date.now()) });
     if (tag && tag !== "all") params.set("tag", tag);
     if (excludeIds.length > 0) params.set("exclude", excludeIds.join(","));
 
@@ -202,9 +198,8 @@ export default function PlayPage() {
       .then((data: PuzzleData) => {
         setPuzzle(data);
         if (data.availableTags) setAvailableTags(data.availableTags);
-        const subjectId = mode === "album" ? data.albumId : data.artistId;
-        if (subjectId) {
-          setPlayedSubjectIds((prev) => [...prev, subjectId]);
+        if (data.artistId) {
+          setPlayedArtistIds((prev) => [...prev, data.artistId]);
         }
         return data;
       });
@@ -213,7 +208,7 @@ export default function PlayPage() {
   // ── Server-side validation helpers ──────────────────────────────────────
 
   const validateGuess = useCallback(
-    async (puzzleId: string, guessText: string): Promise<{ correct: boolean; answer?: string; artist?: string }> => {
+    async (puzzleId: string, guessText: string): Promise<{ correct: boolean; answer?: string }> => {
       const res = await fetch("/api/puzzle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -224,20 +219,20 @@ export default function PlayPage() {
     []
   );
 
-  const fetchAnswer = useCallback(async (puzzleId: string): Promise<{ answer: string; artist?: string }> => {
+  const fetchAnswer = useCallback(async (puzzleId: string): Promise<string> => {
     const res = await fetch("/api/puzzle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ puzzleId, action: "reveal" }),
     });
     const data = await res.json();
-    return { answer: data.answer || "Unknown", artist: data.artist };
+    return data.answer || "Unknown";
   }, []);
 
   // ── Initial load ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchPuzzle("all", "artist")
+    fetchPuzzle("all")
       .then(() => setGameState("ready"))
       .catch((err) => {
         if (err.message === "exhausted") setGameState("exhausted");
@@ -281,10 +276,9 @@ export default function PlayPage() {
     setScorePop(false);
     setCopied(false);
     setRevealedAnswer("");
-    setRevealedArtist("");
     setValidating(false);
     setLatestDotIndex(-1);
-    fetchPuzzle(selectedTag, selectedMode, playedSubjectIds)
+    fetchPuzzle(selectedTag, playedArtistIds)
       .then(() => {
         setRevealedCount(1);
         setLatestDotIndex(0);
@@ -318,43 +312,10 @@ export default function PlayPage() {
     setGuessHistory([]);
     setSongsUsed(0);
     setRevealedAnswer("");
-    setRevealedArtist("");
     setValidating(false);
     setLatestDotIndex(-1);
-    setPlayedSubjectIds([]);
-    fetchPuzzle(tag, selectedMode)
-      .then(() => setGameState("ready"))
-      .catch((err) => {
-        if (err.message === "exhausted") setGameState("exhausted");
-        else console.error(err);
-      });
-  };
-
-  // ── Change mode ─────────────────────────────────────────────────────────
-
-  const changeMode = (mode: GameMode) => {
-    if (mode === selectedMode) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (revealRef.current) clearInterval(revealRef.current);
-    setSelectedMode(mode);
-    setPuzzle(null);
-    setGameState("loading");
-    setRevealedCount(0);
-    setTimeRemaining(TIMER_SECONDS);
-    setGraceRemaining(GRACE_SECONDS);
-    setGuess("");
-    setWrongGuesses(0);
-    setScore(SCORE_MAX);
-    setFinalScore(0);
-    setWrongFlash(false);
-    setGuessHistory([]);
-    setSongsUsed(0);
-    setRevealedAnswer("");
-    setRevealedArtist("");
-    setValidating(false);
-    setLatestDotIndex(-1);
-    setPlayedSubjectIds([]);
-    fetchPuzzle(selectedTag, mode)
+    setPlayedArtistIds([]);
+    fetchPuzzle(tag)
       .then(() => setGameState("ready"))
       .catch((err) => {
         if (err.message === "exhausted") setGameState("exhausted");
@@ -425,10 +386,7 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (gameState === "lost" && puzzle && !revealedAnswer) {
-      fetchAnswer(puzzle.id).then((result) => {
-        setRevealedAnswer(result.answer);
-        if (result.artist) setRevealedArtist(result.artist);
-      });
+      fetchAnswer(puzzle.id).then(setRevealedAnswer);
     }
   }, [gameState, puzzle, revealedAnswer, fetchAnswer]);
 
@@ -485,7 +443,6 @@ export default function PlayPage() {
         setSongsUsed(revealedCount);
         setRevealedCount(puzzle.totalSongs);
         setRevealedAnswer(result.answer || "");
-        if (result.artist) setRevealedArtist(result.artist);
         setGameState("won");
         setScorePop(true);
         setTimeout(() => setScorePop(false), 500);
@@ -528,8 +485,7 @@ export default function PlayPage() {
       if (gameState === "lost") return "⬛";
       return "⬜";
     });
-    const modeLabel = selectedMode === "album" ? " — Album" : "";
-    const text = [`🎵 Deep Cut${modeLabel}`, blocks.join(""),
+    const text = [`🎵 Deep Cut`, blocks.join(""),
       gameState === "won" ? `${finalScore} pts — clue ${songsUsed}/${puzzle.totalSongs}` : `❌ Could not guess`,
     ].join("\n");
     navigator.clipboard.writeText(text);
@@ -552,9 +508,6 @@ export default function PlayPage() {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
-  const modeSubtitle = selectedMode === "album" ? "Name the Album" : "Name the Artist";
-  const inputPlaceholder = selectedMode === "album" ? "What album?" : "Who is it?";
-
   // ── Exhausted — no more puzzles in this category ─────────────────────
 
   if (gameState === "exhausted") {
@@ -573,8 +526,8 @@ export default function PlayPage() {
             </h1>
             <p className="font-body text-sm text-[#6b6b6b] mb-8">
               {selectedTag === "all"
-                ? `Every ${selectedMode} in the catalog. Impressive.`
-                : `No more ${TAG_LABELS[selectedTag] || selectedTag} ${selectedMode} puzzles left this session.`}
+                ? "Every artist in the catalog. Impressive."
+                : `No more ${TAG_LABELS[selectedTag] || selectedTag} puzzles left this session.`}
             </p>
 
             {sessionScore.played > 0 && (
@@ -670,35 +623,9 @@ export default function PlayPage() {
             <h1 className="font-display text-5xl sm:text-6xl text-[#1a1a1a] mb-1 leading-[1.05]">
               Deep Cut
             </h1>
-            <p className="font-display text-lg text-[#737373] italic mb-5">
-              {modeSubtitle}
+            <p className="font-display text-lg text-[#737373] italic mb-7">
+              Name the Artist
             </p>
-
-            {/* Mode toggle */}
-            <div className="flex justify-center gap-1 mb-7 bg-[#eae7e0] rounded-lg p-1" role="group" aria-label="Game mode">
-              <button
-                onClick={() => changeMode("artist")}
-                aria-pressed={selectedMode === "artist"}
-                className={`font-body text-xs px-4 py-1.5 rounded-md transition-all duration-200 ${
-                  selectedMode === "artist"
-                    ? "bg-white text-[#1a1a1a] shadow-sm font-medium"
-                    : "bg-transparent text-[#737373] hover:text-[#4a4a4a]"
-                }`}
-              >
-                Artist
-              </button>
-              <button
-                onClick={() => changeMode("album")}
-                aria-pressed={selectedMode === "album"}
-                className={`font-body text-xs px-4 py-1.5 rounded-md transition-all duration-200 ${
-                  selectedMode === "album"
-                    ? "bg-white text-[#1a1a1a] shadow-sm font-medium"
-                    : "bg-transparent text-[#737373] hover:text-[#4a4a4a]"
-                }`}
-              >
-                Album
-              </button>
-            </div>
 
             {sessionScore.played > 0 && (
               <div className="flex justify-center gap-5 mb-7 font-body text-xs text-[#737373]">
@@ -754,9 +681,7 @@ export default function PlayPage() {
               </div>
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">02</span>
-                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">
-                  Type your guess whenever you think you know the {selectedMode}
-                </p>
+                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">Type your guess whenever you think you know the artist</p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">03</span>
@@ -801,7 +726,7 @@ export default function PlayPage() {
         <header className="shrink-0 z-10 bg-[#FAFAF8] border-b border-[#e8e5de]">
           <div className="max-w-lg mx-auto px-4 pt-2 pb-2">
 
-            {/* Row 1: ← Menu + mode/category ... score/time */}
+            {/* Row 1: ← Menu + category ... score/time */}
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <button
@@ -822,11 +747,6 @@ export default function PlayPage() {
                       Give up
                     </button>
                   </>
-                )}
-                {selectedMode === "album" && (
-                  <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">
-                    Album
-                  </span>
                 )}
                 {selectedTag !== "all" && (
                   <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">
@@ -885,7 +805,7 @@ export default function PlayPage() {
               <form
                 onSubmit={handleFormSubmit}
                 className={wrongFlash ? "animate-shake" : ""}
-                aria-label={`Guess the ${selectedMode}`}
+                aria-label="Guess the artist"
               >
                 <div
                   className={`
@@ -902,7 +822,7 @@ export default function PlayPage() {
                     type="text"
                     value={guess}
                     onChange={(e) => setGuess(e.target.value)}
-                    placeholder={inputPlaceholder}
+                    placeholder="Who is it?"
                     enterKeyHint="go"
                     autoComplete="off"
                     autoCorrect="off"
@@ -965,10 +885,7 @@ export default function PlayPage() {
                     {gameState === "won" ? (
                       <>
                         <p className="font-display text-2xl text-[#15803d] leading-tight">{revealedAnswer}</p>
-                        {revealedArtist && (
-                          <p className="font-display text-sm text-[#15803d]/70 leading-tight mt-0.5">{revealedArtist}</p>
-                        )}
-                        <p className="text-[11px] text-[#6b6b6b] mt-1">
+                        <p className="text-[11px] text-[#6b6b6b] mt-0.5">
                           Guessed on clue {songsUsed} of {puzzle.totalSongs} · {finalScore} pts
                         </p>
                       </>
@@ -976,9 +893,6 @@ export default function PlayPage() {
                       <>
                         <p className="text-[11px] text-[#6b6b6b]">The answer was</p>
                         <p className="font-display text-2xl text-[#b91c1c] leading-tight">{revealedAnswer || "..."}</p>
-                        {revealedArtist && (
-                          <p className="font-display text-sm text-[#b91c1c]/70 leading-tight mt-0.5">{revealedArtist}</p>
-                        )}
                       </>
                     )}
                   </div>

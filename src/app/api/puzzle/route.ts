@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq, asc, sql, and, notInArray } from "drizzle-orm";
+import { eq, asc, sql, and, notInArray, isNotNull } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { unstable_noStore as noStore } from "next/cache";
 
@@ -29,6 +29,17 @@ function normalize(str: string): string {
     .trim();
 }
 
+function normalizeAlbumName(str: string): string {
+  return normalize(
+    str
+      // Strip parenthetical editions: (Deluxe Edition), (Remastered), etc.
+      .replace(/\s*\([^)]*(?:edition|remaster|deluxe|special|bonus|anniversary|expanded|collector)[^)]*\)/gi, "")
+      // Strip bracket editions: [Deluxe], [Remastered], etc.
+      .replace(/\s*\[[^\]]*(?:edition|remaster|deluxe|special|bonus|anniversary|expanded|collector)[^\]]*\]/gi, "")
+      .trim()
+  );
+}
+
 function levenshtein(a: string, b: string): number {
   const matrix: number[][] = [];
   for (let i = 0; i <= a.length; i++) {
@@ -49,20 +60,31 @@ function levenshtein(a: string, b: string): number {
   return matrix[a.length][b.length];
 }
 
-function isCorrectGuess(guess: string, answer: string): boolean {
-  const ng = normalize(guess);
-  const na = normalize(answer);
+function isCorrectGuess(guess: string, answer: string, mode: string = "artist"): boolean {
+  const normalizeFunc = mode === "album" ? normalizeAlbumName : normalize;
+  const ng = normalizeFunc(guess);
+  const na = normalizeFunc(answer);
   if (ng === na) return true;
+
   const ngNoThe = ng.replace(/^the /, "");
   const naNoThe = na.replace(/^the /, "");
   if (ngNoThe === naNoThe) return true;
+
   const maxDist = na.length <= 8 ? 1 : 2;
   if (levenshtein(ng, na) <= maxDist) return true;
   if (levenshtein(ngNoThe, naNoThe) <= maxDist) return true;
+
+  // Album mode: also try matching against stripped version of the answer
+  if (mode === "album") {
+    const naStripped = normalize(answer);
+    if (ng === naStripped) return true;
+    if (levenshtein(ng, naStripped) <= maxDist) return true;
+  }
+
   return false;
 }
 
-// ── Song selection: lock top 3 hits, rotate deep cuts ───────────────────
+// ── Song selection: lock top 3 hits, rotate deep cuts (Artist mode only) ─
 
 function selectSongs(
   allSongs: { displayOrder: number; songName: string }[]
@@ -89,6 +111,14 @@ function selectSongs(
   return combined.map((s, i) => ({ order: i + 1, name: s.songName }));
 }
 
+// ── Album mode: use all songs, no rotation ──────────────────────────────
+
+function selectAlbumSongs(
+  allSongs: { displayOrder: number; songName: string }[]
+): { order: number; name: string }[] {
+  return allSongs.map((s, i) => ({ order: i + 1, name: s.songName }));
+}
+
 // ── GET: Fetch a random puzzle ──────────────────────────────────────────
 
 export async function GET(request: Request) {
@@ -97,20 +127,34 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const tag = searchParams.get("tag");
+    const mode = searchParams.get("mode") || "artist";
     const excludeRaw = searchParams.get("exclude");
 
-    const excludedArtistIds: string[] = excludeRaw
+    const excludedIds: string[] = excludeRaw
       ? excludeRaw.split(",").filter(Boolean)
       : [];
 
     const conditions = [eq(schema.puzzles.published, true)];
+
     if (tag) {
       conditions.push(sql`${tag} = ANY(${schema.puzzles.tags})`);
     }
-    if (excludedArtistIds.length > 0) {
-      conditions.push(
-        notInArray(schema.puzzles.artistId, excludedArtistIds)
-      );
+
+    // Filter by mode: album puzzles have album_id, artist puzzles have artist_id
+    if (mode === "album") {
+      conditions.push(isNotNull(schema.puzzles.albumId));
+      if (excludedIds.length > 0) {
+        conditions.push(
+          notInArray(schema.puzzles.albumId, excludedIds)
+        );
+      }
+    } else {
+      conditions.push(isNotNull(schema.puzzles.artistId));
+      if (excludedIds.length > 0) {
+        conditions.push(
+          notInArray(schema.puzzles.artistId, excludedIds)
+        );
+      }
     }
 
     // Fetch randomized candidates, find first with enough songs
@@ -121,6 +165,7 @@ export async function GET(request: Request) {
         primaryGenre: schema.puzzles.primaryGenre,
         tags: schema.puzzles.tags,
         artistId: schema.puzzles.artistId,
+        albumId: schema.puzzles.albumId,
       })
       .from(schema.puzzles)
       .where(and(...conditions))
@@ -154,7 +199,10 @@ export async function GET(request: Request) {
       .where(eq(schema.puzzleSongs.puzzleId, puzzle.id))
       .orderBy(asc(schema.puzzleSongs.displayOrder));
 
-    const selectedSongs = selectSongs(allSongRows);
+    // Album mode uses all songs; Artist mode uses rotation
+    const selectedSongs = mode === "album"
+      ? selectAlbumSongs(allSongRows)
+      : selectSongs(allSongRows);
 
     const allTags = await db
       .select({ tags: schema.puzzles.tags })
@@ -171,7 +219,8 @@ export async function GET(request: Request) {
       {
         id: puzzle.id,
         artistId: puzzle.artistId,
-        mode: puzzle.mode,
+        albumId: puzzle.albumId,
+        mode: mode,
         genre: puzzle.primaryGenre,
         tags: puzzle.tags || [],
         songs: selectedSongs,
@@ -209,13 +258,63 @@ export async function POST(request: Request) {
     }
 
     const puzzleRow = await db
-      .select({ artistId: schema.puzzles.artistId })
+      .select({
+        artistId: schema.puzzles.artistId,
+        albumId: schema.puzzles.albumId,
+      })
       .from(schema.puzzles)
       .where(eq(schema.puzzles.id, puzzleId))
       .then((rows) => rows[0]);
 
-    if (!puzzleRow?.artistId) {
+    if (!puzzleRow) {
       return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
+    }
+
+    // ── Album mode ────────────────────────────────────────────────────
+    if (puzzleRow.albumId) {
+      const album = await db
+        .select({
+          name: schema.albums.name,
+          artistId: schema.albums.artistId,
+        })
+        .from(schema.albums)
+        .where(eq(schema.albums.id, puzzleRow.albumId))
+        .then((rows) => rows[0]);
+
+      if (!album) {
+        return NextResponse.json({ error: "Album not found" }, { status: 404 });
+      }
+
+      const artist = await db
+        .select({ name: schema.artists.name })
+        .from(schema.artists)
+        .where(eq(schema.artists.id, album.artistId))
+        .then((rows) => rows[0]);
+
+      const artistName = artist?.name || "Unknown";
+
+      if (action === "reveal") {
+        return NextResponse.json(
+          { answer: album.name, artist: artistName },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+
+      if (!guess || !guess.trim()) {
+        return NextResponse.json({ error: "guess required" }, { status: 400 });
+      }
+
+      const correct = isCorrectGuess(guess.trim(), album.name, "album");
+
+      return NextResponse.json(
+        { correct, ...(correct ? { answer: album.name, artist: artistName } : {}) },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // ── Artist mode (default) ─────────────────────────────────────────
+    if (!puzzleRow.artistId) {
+      return NextResponse.json({ error: "Puzzle has no subject" }, { status: 404 });
     }
 
     const artist = await db

@@ -60,22 +60,33 @@ export const artists = pgTable(
 // 04 — Albums
 // ============================================================================
 
-export const albums = pgTable("albums", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  artistId: uuid("artist_id")
-    .notNull()
-    .references(() => artists.id, { onDelete: "restrict" }),
-  spotifyId: text("spotify_id").unique(),
-  name: text("name").notNull(),
-  year: integer("year"),
-  producer: text("producer"),
-  label: text("label"),
-  recordingLocation: text("recording_location"),
-  isLiveAlbum: boolean("is_live_album").default(false),
-  isCompilation: boolean("is_compilation").default(false),
-  contentFlag: text("content_flag"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const albums = pgTable(
+  "albums",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    artistId: uuid("artist_id")
+      .notNull()
+      .references(() => artists.id, { onDelete: "restrict" }),
+    spotifyId: text("spotify_id").unique(),
+    name: text("name").notNull(),
+    nameNormalized: text("name_normalized").notNull(),
+    year: integer("year"),
+    producer: text("producer"),
+    label: text("label"),
+    recordingLocation: text("recording_location"),
+    isLiveAlbum: boolean("is_live_album").default(false),
+    isCompilation: boolean("is_compilation").default(false),
+    contentFlag: text("content_flag"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_albums_artist").on(table.artistId),
+    index("idx_albums_name_trgm").using(
+      "gin",
+      sql`${table.nameNormalized} gin_trgm_ops`
+    ),
+  ]
+);
 
 // ============================================================================
 // 05 — Films
@@ -243,6 +254,9 @@ export const puzzles = pgTable(
     artistId: uuid("artist_id").references(() => artists.id, {
       onDelete: "restrict",
     }),
+    albumId: uuid("album_id").references(() => albums.id, {
+      onDelete: "restrict",
+    }),
     filmId: uuid("film_id").references(() => films.id, {
       onDelete: "restrict",
     }),
@@ -269,11 +283,12 @@ export const puzzles = pgTable(
     index("idx_puzzles_genre").on(table.primaryGenre),
     index("idx_puzzles_published").on(table.published),
     index("idx_puzzles_artist_id").on(table.artistId),
+    index("idx_puzzles_album_id").on(table.albumId),
     index("idx_puzzles_film_id").on(table.filmId),
     // Enforce exactly one subject per puzzle
     check(
       "puzzles_one_subject",
-      sql`(("artist_id" IS NOT NULL)::int + ("film_id" IS NOT NULL)::int + ("composer_id" IS NOT NULL)::int = 1)`
+      sql`(("artist_id" IS NOT NULL)::int + ("album_id" IS NOT NULL)::int + ("film_id" IS NOT NULL)::int + ("composer_id" IS NOT NULL)::int = 1)`
     ),
   ]
 );
