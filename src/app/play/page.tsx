@@ -55,6 +55,8 @@ const injectedStyles = `
   .font-display { font-family: 'Instrument Serif', Georgia, serif; }
   .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
+  html, body { overflow-x: hidden; }
+
   @keyframes slideReveal {
     0% { opacity: 0; transform: translateX(-12px) scale(0.98); }
     60% { opacity: 1; transform: translateX(2px) scale(1.005); }
@@ -484,7 +486,7 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="min-h-dvh bg-[#FAFAF8] flex items-center justify-center" role="status">
+        <main className="min-h-dvh bg-[#FAFAF8] flex items-center justify-center overflow-x-hidden" role="status">
           <div className="animate-fade-up text-center">
             <p className="font-display text-2xl text-[#1a1a1a] mb-1">Deep Cut</p>
             <p className="font-body text-[#8b8b8b] text-xs tracking-widest uppercase">Loading...</p>
@@ -500,7 +502,7 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="min-h-dvh bg-[#FAFAF8] flex flex-col items-center justify-center px-6">
+        <main className="min-h-dvh bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-x-hidden">
           <div className="animate-fade-up text-center max-w-sm w-full">
             <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
               Daily Puzzle
@@ -596,7 +598,7 @@ export default function PlayPage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-      <div className="min-h-dvh bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body">
+      <div className="min-h-dvh bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-x-hidden">
 
         {/* ── Compact sticky header ─────────────────────────────────────── */}
         <header className="sticky top-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-b border-[#e8e5de]">
