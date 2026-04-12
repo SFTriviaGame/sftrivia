@@ -414,6 +414,14 @@ export default function PlayPage() {
     }
   }, [gameState]);
 
+  // ── Refocus after validation completes (iOS fallback) ───────────────────
+
+  useEffect(() => {
+    if (!validating && (gameState === "preview" || gameState === "playing" || gameState === "grace")) {
+      inputRef.current?.focus();
+    }
+  }, [validating, gameState]);
+
   // ── Guess (server-validated) ────────────────────────────────────────────
 
   const canGuess = gameState === "preview" || gameState === "playing" || gameState === "grace";
@@ -443,10 +451,8 @@ export default function PlayPage() {
         setWrongGuesses((prev) => prev + 1);
         setGuess("");
         setWrongFlash(true);
-        setTimeout(() => {
-          setWrongFlash(false);
-          inputRef.current?.focus();
-        }, 500);
+        inputRef.current?.focus();
+        setTimeout(() => setWrongFlash(false), 500);
       }
     } catch {
       console.error("Validation request failed");
