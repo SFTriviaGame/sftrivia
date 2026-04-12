@@ -736,7 +736,7 @@ export default function PlayPage() {
 
         {/* ── Song list ─────────────────────────────────────────────────── */}
         <main
-          className={`flex-1 overflow-y-auto hide-scrollbar ${isFinished ? "pb-20" : ""}`}
+          className={`flex-1 overflow-y-auto hide-scrollbar ${isFinished ? "pb-16" : ""}`}
           ref={songListRef}
         >
           <div className="max-w-lg mx-auto px-4 py-2.5">
@@ -864,14 +864,14 @@ export default function PlayPage() {
               })}
             </ol>
 
-            <div className="h-8" />
+            {!isFinished && <div className="h-8" />}
           </div>
         </main>
 
         {/* ── Sticky bottom bar — result actions ────────────────────────── */}
         {isFinished && (
-          <div className="sticky bottom-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-t border-[#e8e5de]">
-            <div className="max-w-lg mx-auto px-4 py-2.5 flex gap-2">
+          <div className="sticky bottom-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-t border-[#e8e5de]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+            <div className="max-w-lg mx-auto px-4 py-2 flex gap-2">
               <button
                 onClick={handleShare}
                 className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
