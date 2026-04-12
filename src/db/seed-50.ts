@@ -706,7 +706,7 @@ async function seedAll() {
       // Create albums
       const createdAlbums = [];
       for (const a of data.albums) {
-        const [album] = await db.insert(albums).values({ artistId: artist.id, name: a.name, year: a.year }).returning();
+        const [album] = await db.insert(albums).values({ artistId: artist.id, name: a.name, nameNormalized: a.name.toLowerCase().trim(), year: a.year }).returning();
         createdAlbums.push(album);
       }
 
