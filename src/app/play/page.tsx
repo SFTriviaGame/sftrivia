@@ -56,7 +56,8 @@ const injectedStyles = `
   .font-display { font-family: 'Instrument Serif', Georgia, serif; }
   .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
 
-  html, body { overflow-x: hidden; }
+  html, body { overflow-x: hidden; overscroll-behavior-x: none; }
+  body { position: relative; width: 100%; }
 
   @keyframes slideReveal {
     0% { opacity: 0; transform: translateX(-12px) scale(0.98); }
@@ -599,7 +600,7 @@ export default function PlayPage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-      <div className="min-h-dvh bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-x-hidden">
+      <div className="min-h-dvh bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-x-hidden w-full" style={{ touchAction: "pan-y" }}>
 
         {/* ── Compact sticky header ─────────────────────────────────────── */}
         <header className="sticky top-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-b border-[#e8e5de]">
