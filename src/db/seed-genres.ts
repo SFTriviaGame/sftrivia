@@ -252,7 +252,7 @@ async function seedGenres() {
       // Create albums
       const createdAlbums = [];
       for (const [name, year] of d.a) {
-        const [album] = await db.insert(albums).values({ artistId: artist.id, name, year }).returning();
+        const [album] = await db.insert(albums).values({ artistId: artist.id, name, nameNormalized: name.toLowerCase().trim(), year }).returning();
         createdAlbums.push(album);
       }
 

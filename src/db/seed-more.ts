@@ -24,10 +24,10 @@ async function seedMore() {
     })
     .returning();
 
-  const [appetite] = await db.insert(albums).values({ artistId: gnr.id, name: "Appetite for Destruction", year: 1987 }).returning();
-  const [lies] = await db.insert(albums).values({ artistId: gnr.id, name: "GN'R Lies", year: 1988 }).returning();
-  const [illusion1] = await db.insert(albums).values({ artistId: gnr.id, name: "Use Your Illusion I", year: 1991 }).returning();
-  const [illusion2] = await db.insert(albums).values({ artistId: gnr.id, name: "Use Your Illusion II", year: 1991 }).returning();
+  const [appetite] = await db.insert(albums).values({ artistId: gnr.id, name: "Appetite for Destruction", nameNormalized: "appetite for destruction", year: 1987 }).returning();
+  const [lies] = await db.insert(albums).values({ artistId: gnr.id, name: "GN'R Lies", nameNormalized: "gnr lies", year: 1988 }).returning();
+  const [illusion1] = await db.insert(albums).values({ artistId: gnr.id, name: "Use Your Illusion I", nameNormalized: "use your illusion i", year: 1991 }).returning();
+  const [illusion2] = await db.insert(albums).values({ artistId: gnr.id, name: "Use Your Illusion II", nameNormalized: "use your illusion ii", year: 1991 }).returning();
 
   const gnrSongs = [
     { name: "Think About You", albumId: appetite.id, popularity: 12 },
@@ -77,10 +77,10 @@ async function seedMore() {
     })
     .returning();
 
-  const [pyromania] = await db.insert(albums).values({ artistId: dl.id, name: "Pyromania", year: 1983 }).returning();
-  const [hysteria] = await db.insert(albums).values({ artistId: dl.id, name: "Hysteria", year: 1987 }).returning();
-  const [highDry] = await db.insert(albums).values({ artistId: dl.id, name: "High 'n' Dry", year: 1981 }).returning();
-  const [adrenalize] = await db.insert(albums).values({ artistId: dl.id, name: "Adrenalize", year: 1992 }).returning();
+  const [pyromania] = await db.insert(albums).values({ artistId: dl.id, name: "Pyromania", nameNormalized: "pyromania", year: 1983 }).returning();
+  const [hysteria] = await db.insert(albums).values({ artistId: dl.id, name: "Hysteria", nameNormalized: "hysteria", year: 1987 }).returning();
+  const [highDry] = await db.insert(albums).values({ artistId: dl.id, name: "High 'n' Dry", nameNormalized: "high n dry", year: 1981 }).returning();
+  const [adrenalize] = await db.insert(albums).values({ artistId: dl.id, name: "Adrenalize", nameNormalized: "adrenalize", year: 1992 }).returning();
 
   const dlSongs = [
     { name: "Die Hard the Hunter", albumId: pyromania.id, popularity: 10 },

@@ -37,6 +37,7 @@ async function seedTestPuzzle() {
     .values({
       artistId: artist.id,
       name: "Shout at the Devil",
+      nameNormalized: "shout at the devil",
       year: 1983,
     })
     .returning();
@@ -46,6 +47,7 @@ async function seedTestPuzzle() {
     .values({
       artistId: artist.id,
       name: "Theatre of Pain",
+      nameNormalized: "theatre of pain",
       year: 1985,
     })
     .returning();
@@ -55,6 +57,7 @@ async function seedTestPuzzle() {
     .values({
       artistId: artist.id,
       name: "Girls, Girls, Girls",
+      nameNormalized: "girls girls girls",
       year: 1987,
     })
     .returning();
@@ -64,6 +67,7 @@ async function seedTestPuzzle() {
     .values({
       artistId: artist.id,
       name: "Dr. Feelgood",
+      nameNormalized: "dr feelgood",
       year: 1989,
     })
     .returning();
@@ -73,6 +77,7 @@ async function seedTestPuzzle() {
     .values({
       artistId: artist.id,
       name: "Too Fast for Love",
+      nameNormalized: "too fast for love",
       year: 1981,
     })
     .returning();
