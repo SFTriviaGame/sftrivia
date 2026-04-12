@@ -14,7 +14,6 @@ const injectedStyles = `
 const SITE_NAME = "Deep Cut";
 const CONTACT_EMAIL = "hello@example.com"; // Replace with real email
 const EFFECTIVE_DATE = "April 2026"; // Replace with launch date
-const SITE_URL = "your-app.vercel.app"; // Replace with real domain
 
 export default function PrivacyPage() {
   return (
@@ -44,7 +43,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="font-display text-xl text-[#1a1a1a] mb-3">What {SITE_NAME} Is</h2>
               <p>
-                {SITE_NAME} is a free music trivia game. Songs from an artist's catalog reveal one
+                {SITE_NAME} is a free music trivia game. Songs from an artist&apos;s catalog reveal one
                 at a time — deep cuts first, hits last — and you guess the artist. We built it
                 because we love music and wanted a game that rewards real knowledge.
               </p>
@@ -58,7 +57,7 @@ export default function PrivacyPage() {
               </h3>
               <p>
                 If you play without signing up, we store your session score (total points, games
-                played, win rate, and streak) in your browser's localStorage. This data never
+                played, win rate, and streak) in your browser&apos;s localStorage. This data never
                 leaves your device. We do not store it on our servers. Clearing your browser data
                 erases it.
               </p>
@@ -67,7 +66,7 @@ export default function PrivacyPage() {
                 With an account (coming soon)
               </h3>
               <p>
-                When we launch accounts, you'll be able to sign up with your email address via a
+                When we launch accounts, you&apos;ll be able to sign up with your email address via a
                 magic link — no password required. If you create an account, we will store your
                 email address, game history, scores, and any titles or achievements you earn. We
                 will never sell your email to third parties.
@@ -155,7 +154,7 @@ export default function PrivacyPage() {
               <h2 className="font-display text-xl text-[#1a1a1a] mb-3">Changes to This Policy</h2>
               <p>
                 We may update this policy as {SITE_NAME} evolves — particularly when we add
-                accounts and new features. We'll note the effective date at the top. Continued
+                accounts and new features. We&apos;ll note the effective date at the top. Continued
                 use of {SITE_NAME} after changes constitutes acceptance of the updated policy.
               </p>
             </section>

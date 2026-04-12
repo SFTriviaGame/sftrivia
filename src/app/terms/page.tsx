@@ -44,7 +44,7 @@ export default function TermsPage() {
               <h2 className="font-display text-xl text-[#1a1a1a] mb-3">Welcome</h2>
               <p>
                 {SITE_NAME} is a music trivia game. By using {SITE_NAME}, you agree to these
-                terms. If you don't agree, please don't use the service. These terms are
+                terms. If you don&apos;t agree, please don&apos;t use the service. These terms are
                 intentionally written in plain language.
               </p>
             </section>
@@ -52,14 +52,14 @@ export default function TermsPage() {
             <section>
               <h2 className="font-display text-xl text-[#1a1a1a] mb-3">Using {SITE_NAME}</h2>
               <p>
-                {SITE_NAME} is free to play. You don't need an account to play, but some features
+                {SITE_NAME} is free to play. You don&apos;t need an account to play, but some features
                 (scores, titles, leaderboards) may require one when accounts launch. You agree
                 to use the game for its intended purpose — playing music trivia — and not to
                 abuse, exploit, or interfere with the service.
               </p>
               <p className="mt-3">
                 Specifically, you agree not to: use bots, scripts, or automated tools to play or
-                scrape the game; attempt to access other players' data; deliberately exploit bugs
+                scrape the game; attempt to access other players&apos; data; deliberately exploit bugs
                 to inflate scores or leaderboard positions; use the service to harass or harm
                 others.
               </p>
@@ -89,7 +89,7 @@ export default function TermsPage() {
               </p>
               <p className="mt-3">
                 You may share your results (score cards, screenshots) freely. We encourage it —
-                that's how people discover the game. However, you may not reproduce, redistribute,
+                that&apos;s how people discover the game. However, you may not reproduce, redistribute,
                 or commercially exploit the game itself or its underlying data.
               </p>
             </section>
@@ -117,7 +117,7 @@ export default function TermsPage() {
             <section>
               <h2 className="font-display text-xl text-[#1a1a1a] mb-3">Availability & Changes</h2>
               <p>
-                We aim to keep {SITE_NAME} available and working, but we don't guarantee
+                We aim to keep {SITE_NAME} available and working, but we don&apos;t guarantee
                 uninterrupted access. We may update, modify, or discontinue features at any time.
                 Daily puzzles, categories, game modes, and scoring mechanics may all change as the
                 game grows.
@@ -131,7 +131,7 @@ export default function TermsPage() {
                 for any damages arising from your use of the service, including but not limited to
                 lost data, interrupted access, or inaccurate trivia content. Our total liability
                 to you for any claim related to the service is limited to the amount you paid us,
-                which is zero — it's a free game.
+                which is zero — it&apos;s a free game.
               </p>
             </section>
 
