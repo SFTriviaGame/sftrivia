@@ -485,7 +485,7 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="min-h-dvh bg-[#FAFAF8] flex items-center justify-center overflow-x-hidden" role="status">
+        <main className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center" role="status">
           <div className="animate-fade-up text-center">
             <p className="font-display text-2xl text-[#1a1a1a] mb-1">Deep Cut</p>
             <p className="font-body text-[#8b8b8b] text-xs tracking-widest uppercase">Loading...</p>
@@ -501,7 +501,7 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="min-h-dvh bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-x-hidden">
+        <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
             <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
               Daily Puzzle
@@ -597,10 +597,10 @@ export default function PlayPage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-      <div className="min-h-dvh bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-x-hidden w-full" style={{ touchAction: "pan-y" }}>
+      <div className="fixed inset-0 bg-[#FAFAF8] text-[#1a1a1a] flex flex-col font-body overflow-hidden">
 
         {/* ── Compact sticky header ─────────────────────────────────────── */}
-        <header className="sticky top-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-b border-[#e8e5de]">
+        <header className="shrink-0 z-10 bg-[#FAFAF8] border-b border-[#e8e5de]">
           <div className="max-w-lg mx-auto px-4 pt-2 pb-2">
 
             {/* Row 1: ← Menu + category ... score/time */}
@@ -734,7 +734,7 @@ export default function PlayPage() {
 
         {/* ── Song list ─────────────────────────────────────────────────── */}
         <main
-          className={`flex-1 overflow-y-auto hide-scrollbar ${isFinished ? "pb-16" : ""}`}
+          className="flex-1 overflow-y-auto hide-scrollbar"
           ref={songListRef}
         >
           <div className="max-w-lg mx-auto px-4 py-2.5">
@@ -868,7 +868,7 @@ export default function PlayPage() {
 
         {/* ── Sticky bottom bar — result actions ────────────────────────── */}
         {isFinished && (
-          <div className="sticky bottom-0 z-10 bg-[#FAFAF8]/95 backdrop-blur-sm border-t border-[#e8e5de]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+          <div className="shrink-0 z-10 bg-[#FAFAF8] border-t border-[#e8e5de]" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
             <div className="max-w-lg mx-auto px-4 py-2 flex gap-2">
               <button
                 onClick={handleShare}
