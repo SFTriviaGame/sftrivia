@@ -40,12 +40,13 @@ const TAG_LABELS: Record<string, string> = {
   "70s": "70s",
   "80s": "80s",
   "90s": "90s",
+  "2000s": "2000s",
   "pop": "Pop",
   "classic-rock": "Classic Rock",
   "hair-metal": "Hair Metal",
 };
 
-const TAG_ORDER = ["all", "70s", "80s", "90s", "pop", "classic-rock", "hair-metal"];
+const TAG_ORDER = ["all", "70s", "80s", "90s", "2000s", "pop", "classic-rock", "hair-metal"];
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 

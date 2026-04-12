@@ -22,6 +22,8 @@ function normalize(str: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\bn['']?\b/g, "and")
+    .replace(/[&+]/g, "and")
     .replace(/[^a-z0-9 ]/g, "")
     .replace(/\s+/g, " ")
     .trim();
