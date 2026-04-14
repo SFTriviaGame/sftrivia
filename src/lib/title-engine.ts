@@ -445,7 +445,7 @@ async function grantGenreTitle(
     description: levelDescription(level),
   });
 
-  const granted = await grantTitleToPlayer(playerId, titleId, puzzleId);
+  const granted = await grantTitleToPlayer(playerId, titleId);
   return granted ? titleName : null;
 }
 
@@ -524,7 +524,7 @@ async function checkArtistScholar(
     description: `Deep knowledge of ${artist.name}`,
   });
 
-  const granted = await grantTitleToPlayer(playerId, titleId, puzzleId);
+  const granted = await grantTitleToPlayer(playerId, titleId);
   return granted ? titleName : null;
 }
 
@@ -602,7 +602,7 @@ async function checkAlbumArchivist(
     description: `Album-level knowledge of ${artist.name}`,
   });
 
-  const granted = await grantTitleToPlayer(playerId, titleId, puzzleId);
+  const granted = await grantTitleToPlayer(playerId, titleId);
   return granted ? titleName : null;
 }
 
@@ -671,7 +671,7 @@ async function checkEraPurist(
       description: `${artist.name} expertise rooted in the ${genreDisplayName(decade)}`,
     });
 
-    const granted = await grantTitleToPlayer(playerId, titleId, puzzleId);
+    const granted = await grantTitleToPlayer(playerId, titleId);
     if (granted) return titleName;
   }
 
@@ -723,7 +723,7 @@ async function checkFusionTitles(
         description: `${genreDisplayName(genreA)} meets ${genreDisplayName(genreB)}`,
       });
 
-      const granted = await grantTitleToPlayer(playerId, titleId, puzzleId);
+      const granted = await grantTitleToPlayer(playerId, titleId);
       if (granted) newTitles.push(titleName);
     }
   }
@@ -799,7 +799,7 @@ async function checkConvergenceTitles(
           description: `Mastery across ${genreDisplayName(genreA)}, ${genreDisplayName(genreB)}, and ${genreDisplayName(genreC)}`,
         });
 
-        const granted = await grantTitleToPlayer(playerId, titleId, puzzleId);
+        const granted = await grantTitleToPlayer(playerId, titleId);
         if (granted) newTitles.push(titleName);
       }
     }
@@ -914,7 +914,7 @@ export async function evaluateGlobalTitles(): Promise<void> {
         await updateDisplayedTitle(currentHolderId);
       }
 
-      await grantTitleToPlayer(winnerId, titleId, null);
+      await grantTitleToPlayer(winnerId, titleId);
       await updateDisplayedTitle(winnerId);
     } catch (error) {
       console.error(`Error evaluating global title ${position.name}:`, error);
@@ -1069,8 +1069,7 @@ async function findOrCreateTitle(params: CreateTitleParams): Promise<string> {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function grantTitleToPlayer(
   playerId: string,
-  titleId: string,
-  _puzzleId: string | null
+  titleId: string
 ): Promise<boolean> {
   try {
     await db.execute(sql`

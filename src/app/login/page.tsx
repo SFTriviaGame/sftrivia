@@ -32,7 +32,7 @@ export default function LoginPage() {
       } else {
         window.location.href = "/login/check-email";
       }
-    } catch (err) {
+    } catch {
      setError("Something went wrong. Try again.");
      setIsLoading(false);
    }

@@ -21,16 +21,12 @@ export async function GET(request: Request) {
   const genre = searchParams.get("genre") || null;
 
   try {
-    // Build genre filter clause
-    const genreJoin = genre
-      ? sql`JOIN puzzles p ON pph.puzzle_id = p.id AND ${genre} = ANY(p.tags)`
-      : sql``;
-    const genreJoinStreaks = genre
-      ? sql`JOIN player_puzzle_history pph2 ON pph2.player_id = s.player_id
-            JOIN puzzles p2 ON pph2.puzzle_id = p2.id AND ${genre} = ANY(p2.tags)`
-      : sql``;
+      // Build genre filter clause
+      const genreJoin = genre
+        ? sql`JOIN puzzles p ON pph.puzzle_id = p.id AND ${genre} = ANY(p.tags)`
+        : sql``;
 
-    let leaderboardQuery;
+      let leaderboardQuery;
 
     switch (metric) {
       case "total_score":
