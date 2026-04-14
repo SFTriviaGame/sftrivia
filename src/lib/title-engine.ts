@@ -242,9 +242,10 @@ export async function evaluateTitles(
 // Skip decade tags — decades require breadth across genres, not their own track
 for (const genre of tags) {
   if (/^\d{2,4}s$/.test(genre)) continue;
+  const stats = await calculateGenreStats(playerId, genre);
 
-      // Check levels from highest to lowest
-      for (let level = 5; level >= 1; level--) {
+  // Check levels from highest to lowest
+  for (let level = 5; level >= 1; level--) {
         if (meetsGenreThresholds(stats, level)) {
           const granted = await grantGenreTitle(playerId, genre, level, puzzleId);
           if (granted) newTitles.push(granted);
