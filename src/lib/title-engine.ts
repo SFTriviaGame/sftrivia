@@ -6,6 +6,8 @@
 // Called from /api/score after badge evaluation.
 // =============================================================
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { db } from "@/db";
 import {
   puzzles,
