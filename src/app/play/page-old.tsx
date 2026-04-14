@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { AuthButton } from "@/components/auth-buttons";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -12,6 +14,7 @@ interface PuzzleSong {
 interface PuzzleData {
   id: string;
   artistId: string;
+  albumId: string;
   mode: string;
   genre: string;
   tags: string[];
@@ -21,11 +24,12 @@ interface PuzzleData {
 }
 
 type GameState = "loading" | "ready" | "preview" | "playing" | "grace" | "won" | "lost" | "exhausted";
+type GameMode = "artist" | "album";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const TIMER_SECONDS = 30;
-const GRACE_SECONDS = 3;
+const GRACE_SECONDS = 6;
 const REVEAL_INTERVAL = 3;
 const PREVIEW_SECONDS = 3;
 const SCORE_MAX = 1000;
@@ -37,24 +41,24 @@ const DECAY_PER_SECOND = (SCORE_MAX - SCORE_FLOOR) / TIMER_SECONDS;
 
 const TAG_LABELS: Record<string, string> = {
   "all": "All",
+  "60s": "60s",
   "70s": "70s",
   "80s": "80s",
   "90s": "90s",
   "2000s": "2000s",
+  "2010s": "2010s",
   "pop": "Pop",
   "classic-rock": "Classic Rock",
   "hair-metal": "Hair Metal",
 };
 
-const TAG_ORDER = ["all", "70s", "80s", "90s", "2000s", "pop", "classic-rock", "hair-metal"];
+const TAG_ORDER = ["all", "60s", "70s", "80s", "90s", "2000s", "2010s", "pop", "classic-rock", "hair-metal"];
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
 const injectedStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
-
-  .font-display { font-family: 'Instrument Serif', Georgia, serif; }
-  .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
+  .font-display { font-family: var(--font-display), Georgia, serif; }
+  .font-body { font-family: var(--font-body), system-ui, sans-serif; }
 
   @keyframes slideReveal {
     0% { opacity: 0; transform: translateX(-12px) scale(0.98); }
@@ -146,9 +150,15 @@ function saveScore(total: number, played: number, won: number, streak: number) {
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function PlayPage() {
+function PlayPageInner() {
+  const searchParams = useSearchParams();
+  const initialTag = searchParams.get("tag") || "all";
+  const initialMode = (searchParams.get("mode") === "album" ? "album" : "artist") as GameMode;
+
   const [puzzle, setPuzzle] = useState<PuzzleData | null>(null);
   const [gameState, setGameState] = useState<GameState>("loading");
+  const [selectedMode, setSelectedMode] = useState<GameMode>(initialMode);
+
   const [revealedCount, setRevealedCount] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(TIMER_SECONDS);
   const [graceRemaining, setGraceRemaining] = useState(GRACE_SECONDS);
@@ -161,13 +171,16 @@ export default function PlayPage() {
   const [songsUsed, setSongsUsed] = useState(0);
   const [scorePop, setScorePop] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [selectedTag, setSelectedTag] = useState("all");
+  const [selectedTag, setSelectedTag] = useState(initialTag);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [sessionScore, setSessionScore] = useState({ total: 0, played: 0, won: 0, streak: 0 });
   const [revealedAnswer, setRevealedAnswer] = useState("");
+  const [revealedArtist, setRevealedArtist] = useState("");
   const [validating, setValidating] = useState(false);
-  const [playedArtistIds, setPlayedArtistIds] = useState<string[]>([]);
+  const [playedSubjectIds, setPlayedSubjectIds] = useState<string[]>([]);
   const [latestDotIndex, setLatestDotIndex] = useState(-1);
+  const [wasGraceSave, setWasGraceSave] = useState(false);
+  const [newBadges, setNewBadges] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -182,8 +195,8 @@ export default function PlayPage() {
 
   // ── Fetch puzzle ────────────────────────────────────────────────────────
 
-  const fetchPuzzle = useCallback((tag: string, excludeIds: string[] = []) => {
-    const params = new URLSearchParams({ t: String(Date.now()) });
+  const fetchPuzzle = useCallback((tag: string, mode: GameMode, excludeIds: string[] = []) => {
+    const params = new URLSearchParams({ t: String(Date.now()), mode });
     if (tag && tag !== "all") params.set("tag", tag);
     if (excludeIds.length > 0) params.set("exclude", excludeIds.join(","));
 
@@ -198,8 +211,9 @@ export default function PlayPage() {
       .then((data: PuzzleData) => {
         setPuzzle(data);
         if (data.availableTags) setAvailableTags(data.availableTags);
-        if (data.artistId) {
-          setPlayedArtistIds((prev) => [...prev, data.artistId]);
+        const subjectId = mode === "album" ? data.albumId : data.artistId;
+        if (subjectId) {
+          setPlayedSubjectIds((prev) => [...prev, subjectId]);
         }
         return data;
       });
@@ -208,7 +222,7 @@ export default function PlayPage() {
   // ── Server-side validation helpers ──────────────────────────────────────
 
   const validateGuess = useCallback(
-    async (puzzleId: string, guessText: string): Promise<{ correct: boolean; answer?: string }> => {
+    async (puzzleId: string, guessText: string): Promise<{ correct: boolean; answer?: string; artist?: string }> => {
       const res = await fetch("/api/puzzle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,20 +233,20 @@ export default function PlayPage() {
     []
   );
 
-  const fetchAnswer = useCallback(async (puzzleId: string): Promise<string> => {
+  const fetchAnswer = useCallback(async (puzzleId: string): Promise<{ answer: string; artist?: string }> => {
     const res = await fetch("/api/puzzle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ puzzleId, action: "reveal" }),
     });
     const data = await res.json();
-    return data.answer || "Unknown";
+    return { answer: data.answer || "Unknown", artist: data.artist };
   }, []);
 
   // ── Initial load ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchPuzzle("all")
+    fetchPuzzle(initialTag, initialMode)
       .then(() => setGameState("ready"))
       .catch((err) => {
         if (err.message === "exhausted") setGameState("exhausted");
@@ -276,9 +290,12 @@ export default function PlayPage() {
     setScorePop(false);
     setCopied(false);
     setRevealedAnswer("");
+    setRevealedArtist("");
     setValidating(false);
     setLatestDotIndex(-1);
-    fetchPuzzle(selectedTag, playedArtistIds)
+    setWasGraceSave(false);
+    setNewBadges([]);
+    fetchPuzzle(selectedTag, selectedMode, playedSubjectIds)
       .then(() => {
         setRevealedCount(1);
         setLatestDotIndex(0);
@@ -312,10 +329,43 @@ export default function PlayPage() {
     setGuessHistory([]);
     setSongsUsed(0);
     setRevealedAnswer("");
+    setRevealedArtist("");
     setValidating(false);
     setLatestDotIndex(-1);
-    setPlayedArtistIds([]);
-    fetchPuzzle(tag)
+    setPlayedSubjectIds([]);
+    fetchPuzzle(tag, selectedMode)
+      .then(() => setGameState("ready"))
+      .catch((err) => {
+        if (err.message === "exhausted") setGameState("exhausted");
+        else console.error(err);
+      });
+  };
+
+  // ── Change mode ─────────────────────────────────────────────────────────
+
+  const changeMode = (mode: GameMode) => {
+    if (mode === selectedMode) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (revealRef.current) clearInterval(revealRef.current);
+    setSelectedMode(mode);
+    setPuzzle(null);
+    setGameState("loading");
+    setRevealedCount(0);
+    setTimeRemaining(TIMER_SECONDS);
+    setGraceRemaining(GRACE_SECONDS);
+    setGuess("");
+    setWrongGuesses(0);
+    setScore(SCORE_MAX);
+    setFinalScore(0);
+    setWrongFlash(false);
+    setGuessHistory([]);
+    setSongsUsed(0);
+    setRevealedAnswer("");
+    setRevealedArtist("");
+    setValidating(false);
+    setLatestDotIndex(-1);
+    setPlayedSubjectIds([]);
+    fetchPuzzle(selectedTag, mode)
       .then(() => setGameState("ready"))
       .catch((err) => {
         if (err.message === "exhausted") setGameState("exhausted");
@@ -386,7 +436,10 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (gameState === "lost" && puzzle && !revealedAnswer) {
-      fetchAnswer(puzzle.id).then(setRevealedAnswer);
+      fetchAnswer(puzzle.id).then((result) => {
+        setRevealedAnswer(result.answer);
+        if (result.artist) setRevealedArtist(result.artist);
+      });
     }
   }, [gameState, puzzle, revealedAnswer, fetchAnswer]);
 
@@ -403,6 +456,32 @@ export default function PlayPage() {
       };
       saveScore(updated.total, updated.played, updated.won, updated.streak);
       setSessionScore(updated);
+
+      // Save to database if authenticated
+      if (puzzle) {
+        fetch("/api/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            puzzleId: puzzle.id,
+            score: gameState === "won" ? finalScore : 0,
+            mode: selectedMode,
+            genre: puzzle.genre || puzzle.tags?.[0] || null,
+            won: gameState === "won",
+            songsUsed: songsUsed,
+            wrongGuesses: wrongGuesses,
+            totalSongs: puzzle.totalSongs,
+            gracePeriodSave: wasGraceSave,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.newBadges && data.newBadges.length > 0) {
+              setNewBadges(data.newBadges);
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, [gameState, finalScore]);
 
@@ -439,10 +518,12 @@ export default function PlayPage() {
         if (timerRef.current) clearInterval(timerRef.current);
         if (revealRef.current) clearInterval(revealRef.current);
         const earned = gameState === "grace" ? SCORE_FLOOR : score;
+        setWasGraceSave(gameState === "grace");
         setFinalScore(earned);
         setSongsUsed(revealedCount);
         setRevealedCount(puzzle.totalSongs);
         setRevealedAnswer(result.answer || "");
+        if (result.artist) setRevealedArtist(result.artist);
         setGameState("won");
         setScorePop(true);
         setTimeout(() => setScorePop(false), 500);
@@ -485,7 +566,8 @@ export default function PlayPage() {
       if (gameState === "lost") return "⬛";
       return "⬜";
     });
-    const text = [`🎵 Deep Cut`, blocks.join(""),
+    const modeLabel = selectedMode === "album" ? " — Album" : "";
+    const text = [`🎵 Deep Cut${modeLabel}`, blocks.join(""),
       gameState === "won" ? `${finalScore} pts — clue ${songsUsed}/${puzzle.totalSongs}` : `❌ Could not guess`,
     ].join("\n");
     navigator.clipboard.writeText(text);
@@ -508,6 +590,9 @@ export default function PlayPage() {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
+  const modeSubtitle = selectedMode === "album" ? "Name the Album" : "Name the Artist";
+  const inputPlaceholder = selectedMode === "album" ? "What album?" : "Who is it?";
+
   // ── Exhausted — no more puzzles in this category ─────────────────────
 
   if (gameState === "exhausted") {
@@ -516,9 +601,9 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
+        <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
-            <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
+            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">
               🎉 Nice work
             </p>
             <h1 className="font-display text-3xl sm:text-4xl text-[#1a1a1a] mb-2 leading-tight">
@@ -526,12 +611,12 @@ export default function PlayPage() {
             </h1>
             <p className="font-body text-sm text-[#6b6b6b] mb-8">
               {selectedTag === "all"
-                ? "Every artist in the catalog. Impressive."
-                : `No more ${TAG_LABELS[selectedTag] || selectedTag} puzzles left this session.`}
+                ? `Every ${selectedMode} in the catalog. Impressive.`
+                : `No more ${TAG_LABELS[selectedTag] || selectedTag} ${selectedMode} puzzles left this session.`}
             </p>
 
             {sessionScore.played > 0 && (
-              <div className="flex justify-center gap-5 mb-8 font-body text-xs text-[#8b8b8b]">
+              <div className="flex justify-center gap-5 mb-8 font-body text-xs text-[#737373]">
                 <div>
                   <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
                   <p className="text-[10px]">total pts</p>
@@ -555,7 +640,7 @@ export default function PlayPage() {
 
             {selectedTag !== "all" && (
               <div className="mb-6">
-                <p className="font-body text-[10px] tracking-[3px] text-[#8b8b8b] uppercase mb-2.5">Try another category</p>
+                <p className="font-body text-[10px] tracking-[3px] text-[#737373] uppercase mb-2.5">Try another category</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {otherTags.map((tag) => (
                     <button
@@ -579,6 +664,22 @@ export default function PlayPage() {
             >
               {selectedTag === "all" ? "Start Fresh" : "Play All Categories"}
             </button>
+
+            <nav className="mt-8 font-body text-[11px] text-[#737373]" aria-label="Navigation">
+  <AuthButton />
+  <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/leaderboard" className="hover:text-[#b45309] transition-colors">Leaderboard</a>
+  <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/genres" className="hover:text-[#b45309] transition-colors">Genres</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/profile" className="hover:text-[#b45309] transition-colors">Profile</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/about" className="hover:text-[#b45309] transition-colors">How to Play</a>
+            </nav>
           </div>
         </main>
       </>
@@ -591,10 +692,10 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center" role="status">
+        <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center" role="status">
           <div className="animate-fade-up text-center">
             <p className="font-display text-2xl text-[#1a1a1a] mb-1">Deep Cut</p>
-            <p className="font-body text-[#8b8b8b] text-xs tracking-widest uppercase">Loading...</p>
+            <p className="font-body text-[#737373] text-xs tracking-widest uppercase">Loading...</p>
           </div>
         </main>
       </>
@@ -607,20 +708,46 @@ export default function PlayPage() {
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
-        <main className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
+        <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
-            <p className="font-body text-[10px] tracking-[5px] text-[#8b8b8b] uppercase mb-2">
+            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">
               Daily Puzzle
             </p>
             <h1 className="font-display text-5xl sm:text-6xl text-[#1a1a1a] mb-1 leading-[1.05]">
               Deep Cut
             </h1>
-            <p className="font-display text-lg text-[#8b8b8b] italic mb-7">
-              Name the Artist
+            <p className="font-display text-lg text-[#737373] italic mb-5">
+              {modeSubtitle}
             </p>
 
+            {/* Mode toggle */}
+            <div className="flex justify-center gap-1 mb-7 bg-[#eae7e0] rounded-lg p-1" role="group" aria-label="Game mode">
+              <button
+                onClick={() => changeMode("artist")}
+                aria-pressed={selectedMode === "artist"}
+                className={`font-body text-xs px-4 py-1.5 rounded-md transition-all duration-200 ${
+                  selectedMode === "artist"
+                    ? "bg-white text-[#1a1a1a] shadow-sm font-medium"
+                    : "bg-transparent text-[#737373] hover:text-[#4a4a4a]"
+                }`}
+              >
+                Artist
+              </button>
+              <button
+                onClick={() => changeMode("album")}
+                aria-pressed={selectedMode === "album"}
+                className={`font-body text-xs px-4 py-1.5 rounded-md transition-all duration-200 ${
+                  selectedMode === "album"
+                    ? "bg-white text-[#1a1a1a] shadow-sm font-medium"
+                    : "bg-transparent text-[#737373] hover:text-[#4a4a4a]"
+                }`}
+              >
+                Album
+              </button>
+            </div>
+
             {sessionScore.played > 0 && (
-              <div className="flex justify-center gap-5 mb-7 font-body text-xs text-[#8b8b8b]">
+              <div className="flex justify-center gap-5 mb-7 font-body text-xs text-[#737373]">
                 <div>
                   <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
                   <p className="text-[10px]">total pts</p>
@@ -643,14 +770,15 @@ export default function PlayPage() {
             )}
 
             <div className="mb-7">
-              <p className="font-body text-[10px] tracking-[3px] text-[#8b8b8b] uppercase mb-2.5">Category</p>
-              <div className="flex flex-wrap justify-center gap-1.5">
+              <p className="font-body text-[10px] tracking-[3px] text-[#737373] uppercase mb-2.5" id="category-label">Category</p>
+              <div className="flex flex-wrap justify-center gap-1.5" role="group" aria-labelledby="category-label">
                 {displayTags.map((tag) => (
                   <button
                     key={tag}
                     onClick={() => {
                       if (tag !== selectedTag) changeCategory(tag);
                     }}
+                    aria-pressed={tag === selectedTag}
                     className={`
                       font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200
                       ${tag === selectedTag
@@ -672,7 +800,9 @@ export default function PlayPage() {
               </div>
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">02</span>
-                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">Type your guess whenever you think you know the artist</p>
+                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">
+                  Type your guess whenever you think you know the {selectedMode}
+                </p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">03</span>
@@ -689,9 +819,25 @@ export default function PlayPage() {
               Play
             </button>
 
-            <p className="font-body text-[11px] text-[#8b8b8b] mt-3">
+            <p className="font-body text-[11px] text-[#737373] mt-3">
               {puzzle.totalSongs} clues · {TIMER_SECONDS}s
             </p>
+
+            <nav className="mt-8 font-body text-[11px] text-[#737373]" aria-label="Navigation">
+  <AuthButton />
+  <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/leaderboard" className="hover:text-[#b45309] transition-colors">Leaderboard</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/genres" className="hover:text-[#b45309] transition-colors">Genres</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/profile" className="hover:text-[#b45309] transition-colors">Profile</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a>
+              <span className="mx-2" aria-hidden="true">·</span>
+              <a href="/about" className="hover:text-[#b45309] transition-colors">How to Play</a>
+            </nav>
           </div>
         </main>
       </>
@@ -709,26 +855,32 @@ export default function PlayPage() {
         <header className="shrink-0 z-10 bg-[#FAFAF8] border-b border-[#e8e5de]">
           <div className="max-w-lg mx-auto px-4 pt-2 pb-2">
 
-            {/* Row 1: ← Menu + category ... score/time */}
+            {/* Row 1: ← Menu + mode/category ... score/time */}
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => changeCategory(selectedTag)}
-                  className="text-[10px] text-[#8b8b8b] hover:text-[#4a4a4a] transition-colors"
+                  className="text-[10px] text-[#737373] hover:text-[#4a4a4a] transition-colors"
                   aria-label="Back to menu"
                 >
-                  ← Menu
+                  <span aria-hidden="true">← </span>Menu
                 </button>
                 {canGuess && (
                   <>
-                    <span className="text-[10px] text-[#d5d0c7]">·</span>
+                    <span className="text-[10px] text-[#a09a90]" aria-hidden="true">·</span>
                     <button
                       onClick={giveUp}
-                      className="text-[10px] text-[#8b8b8b] hover:text-[#b91c1c] transition-colors"
+                      className="text-[10px] text-[#737373] hover:text-[#b91c1c] transition-colors"
+                      aria-label="Give up on this puzzle"
                     >
                       Give up
                     </button>
                   </>
+                )}
+                {selectedMode === "album" && (
+                  <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">
+                    Album
+                  </span>
                 )}
                 {selectedTag !== "all" && (
                   <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">
@@ -741,14 +893,14 @@ export default function PlayPage() {
                   className={`text-2xl font-bold tabular-nums leading-none transition-colors duration-300 ${scorePop ? "animate-score-pop" : ""}`}
                   style={{
                     color: isFinished
-                      ? gameState === "won" ? "#15803d" : "#8b8b8b"
+                      ? gameState === "won" ? "#15803d" : "#737373"
                       : isUrgent ? "#b91c1c" : "#1a1a1a",
                   }}
                   aria-label={`Score: ${isFinished ? finalScore : score}`}
                 >
                   {isFinished ? finalScore : score}
                 </p>
-                <p className="text-[10px] leading-none" style={{ color: isUrgent && (isActive || gameState === "preview") ? "#b91c1c" : "#8b8b8b" }}>
+                <p className="text-[10px] leading-none" style={{ color: isUrgent && (isActive || gameState === "preview") ? "#b91c1c" : "#737373" }}>
                   {gameState === "preview" && <span className="text-[#b45309]">ready</span>}
                   {gameState === "grace" && <span className="animate-timer-pulse">GRACE {graceRemaining}s</span>}
                   {gameState === "playing" && <span>{timeRemaining}s</span>}
@@ -787,7 +939,7 @@ export default function PlayPage() {
               <form
                 onSubmit={handleFormSubmit}
                 className={wrongFlash ? "animate-shake" : ""}
-                aria-label="Guess the artist"
+                aria-label={`Guess the ${selectedMode}`}
               >
                 <div
                   className={`
@@ -804,13 +956,13 @@ export default function PlayPage() {
                     type="text"
                     value={guess}
                     onChange={(e) => setGuess(e.target.value)}
-                    placeholder="Who is it?"
+                    placeholder={inputPlaceholder}
                     enterKeyHint="go"
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="off"
                     spellCheck={false}
-                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#b0ab9f]"
+                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#8a8580]"
                   />
                   <button
                     type="submit"
@@ -843,6 +995,7 @@ export default function PlayPage() {
 
         {/* ── Song list ─────────────────────────────────────────────────── */}
         <main
+          id="main-content"
           className="flex-1 overflow-y-auto hide-scrollbar"
           ref={songListRef}
         >
@@ -866,7 +1019,10 @@ export default function PlayPage() {
                     {gameState === "won" ? (
                       <>
                         <p className="font-display text-2xl text-[#15803d] leading-tight">{revealedAnswer}</p>
-                        <p className="text-[11px] text-[#6b6b6b] mt-0.5">
+                        {revealedArtist && (
+                          <p className="font-display text-sm text-[#15803d]/70 leading-tight mt-0.5">{revealedArtist}</p>
+                        )}
+                        <p className="text-[11px] text-[#6b6b6b] mt-1">
                           Guessed on clue {songsUsed} of {puzzle.totalSongs} · {finalScore} pts
                         </p>
                       </>
@@ -874,6 +1030,9 @@ export default function PlayPage() {
                       <>
                         <p className="text-[11px] text-[#6b6b6b]">The answer was</p>
                         <p className="font-display text-2xl text-[#b91c1c] leading-tight">{revealedAnswer || "..."}</p>
+                        {revealedArtist && (
+                          <p className="font-display text-sm text-[#b91c1c]/70 leading-tight mt-0.5">{revealedArtist}</p>
+                        )}
                       </>
                     )}
                   </div>
@@ -883,7 +1042,7 @@ export default function PlayPage() {
 
             {/* Dot progress */}
             <div className="flex items-center gap-2 mb-2.5 px-0.5">
-              <p className="text-[9px] tracking-[3px] text-[#8b8b8b] uppercase" aria-hidden="true">Clues</p>
+              <p className="text-[9px] tracking-[3px] text-[#737373] uppercase" aria-hidden="true">Clues</p>
               <div className="flex gap-[3px]" role="img" aria-label={`${revealedCount} of ${puzzle.totalSongs} clues revealed`}>
                 {puzzle.songs.map((_, i) => {
                   const isRevealed = i < revealedCount;
@@ -937,7 +1096,7 @@ export default function PlayPage() {
                       style={{
                         color: wasWinningSong ? "#15803d"
                           : justRevealed ? "#b45309"
-                          : "#b0ab9f",
+                          : "#8a8580",
                       }}
                       aria-hidden="true"
                     >
@@ -976,27 +1135,69 @@ export default function PlayPage() {
         </main>
 
         {/* ── Sticky bottom bar — result actions ────────────────────────── */}
+        {newBadges.length > 0 && (
+          <div className="shrink-0 z-20 bg-[#faeeda] border-t border-[#e8c97a]">
+            <div className="max-w-lg mx-auto px-4 py-2.5 flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">🏆</span>
+              <p className="font-body text-sm text-[#854f0b] font-medium">
+                Badge earned: {newBadges.join(", ")}
+              </p>
+            </div>
+          </div>
+        )}
         {isFinished && (
           <div className="shrink-0 z-10 bg-[#FAFAF8] border-t border-[#e8e5de]" style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
-            <div className="max-w-lg mx-auto px-4 pt-2 pb-0 flex gap-2">
-              <button
-                onClick={handleShare}
-                className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
-                  hover:border-[#b0ab9f] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
-              >
-                {copied ? "Copied!" : "Share"}
-              </button>
-              <button
-                onClick={loadNextPuzzle}
-                className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold
-                  hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm"
-              >
-                Next →
-              </button>
+            <div className="max-w-lg mx-auto px-4 pt-2 pb-0">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleShare}
+                  aria-label={copied ? "Copied to clipboard" : "Share your result"}
+                  className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
+                    hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
+                >
+                  {copied ? "Copied!" : "Share"}
+                </button>
+                <a
+                  href="/profile"
+                  aria-label="View your profile"
+                  className="text-sm py-2.5 px-4 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
+                    hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all
+                    flex items-center justify-center"
+                >
+                  Profile
+                </a>
+                <button
+                  onClick={loadNextPuzzle}
+                  aria-label="Next puzzle"
+                  className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold
+                    hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm"
+                >
+                  Next <span aria-hidden="true">→</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
     </>
+  );
+}
+
+// ── Suspense wrapper (required for useSearchParams in App Router) ────────
+
+export default function PlayPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center">
+          <div className="text-center">
+            <p style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.5rem", color: "#1a1a1a", marginBottom: "0.25rem" }}>Deep Cut</p>
+            <p style={{ fontFamily: "var(--font-body), system-ui, sans-serif", color: "#737373", fontSize: "0.75rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>Loading...</p>
+          </div>
+        </main>
+      }
+    >
+      <PlayPageInner />
+    </Suspense>
   );
 }

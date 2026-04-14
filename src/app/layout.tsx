@@ -1,3 +1,4 @@
+import { AuthSessionProvider } from "@/components/session-provider";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Instrument_Serif, DM_Sans } from "next/font/google";
@@ -167,7 +168,9 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        {children}
+        <AuthSessionProvider>
+          {children}
+        </AuthSessionProvider>
       </body>
     </html>
   );

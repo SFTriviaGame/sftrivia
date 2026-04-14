@@ -382,26 +382,6 @@ export const playerProfiles = pgTable("player_profiles", {
 });
 
 // ============================================================================
-// 18 — Magic Links
-// ============================================================================
-
-export const magicLinks = pgTable(
-  "magic_links",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    email: text("email").notNull(),
-    tokenHash: text("token_hash").unique().notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    redeemed: boolean("redeemed").default(false),
-    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (table) => [
-    index("idx_magic_links_token").on(table.tokenHash),
-  ]
-);
-
-// ============================================================================
 // 19 — Player Scores
 // ============================================================================
 
@@ -445,6 +425,11 @@ export const playerPuzzleHistory = pgTable(
     wasDaily: boolean("was_daily").default(false),
     wasReplay: boolean("was_replay").default(false),
     wasChallenge: boolean("was_challenge").default(false),
+    solved: boolean("solved").default(false),
+    wrongGuesses: integer("wrong_guesses").default(0),
+    guessedAtClue: integer("guessed_at_clue"),
+    gaveUp: boolean("gave_up").default(false),
+    gracePeriodSave: boolean("grace_period_save").default(false),
   },
   (table) => [
     primaryKey({ columns: [table.playerId, table.puzzleId] }),
@@ -464,6 +449,8 @@ export const streaks = pgTable("streaks", {
     .references(() => playerProfiles.id, { onDelete: "cascade" }),
   currentStreak: integer("current_streak").default(0),
   longestStreak: integer("longest_streak").default(0),
+  currentDayStreak: integer("current_day_streak").default(0),
+  longestDayStreak: integer("longest_day_streak").default(0),
   lastPlayedDate: date("last_played_date"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -511,6 +498,14 @@ export const titles = pgTable("titles", {
   leaderboardMetric: text("leaderboard_metric"),
   isBestowed: boolean("is_bestowed").default(false),
   isActive: boolean("is_active").default(true),
+  titleType: text("title_type").default("genre"),
+  genre: text("genre"),
+  level: integer("level"),
+  genreA: text("genre_a"),
+  genreB: text("genre_b"),
+  genreC: text("genre_c"),
+  artistId: uuid("artist_id").references(() => artists.id),
+  metadata: text("metadata").default("{}"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -546,6 +541,9 @@ export const badges = pgTable("badges", {
   name: text("name").unique().notNull(),
   description: text("description"),
   triggerEvent: text("trigger_event").notNull(),
+  rarity: text("rarity").default("common"),
+  displayOrder: integer("display_order").default(0),
+  icon: text("icon"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
@@ -665,3 +663,70 @@ export const gauntletRecords = pgTable("gauntlet_records", {
   challengeCount: integer("challenge_count").default(0),
   puzzleVersion: integer("puzzle_version").default(1),
 });
+
+
+
+// ============================================================================
+// AUTH.JS TABLES
+// ============================================================================
+
+export const users = pgTable("user", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").unique().notNull(),
+  emailVerified: timestamp("emailVerified", { mode: "date", withTimezone: true }),
+  image: text("image"),
+});
+
+export const accounts = pgTable(
+  "account",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => [
+    primaryKey({ columns: [account.provider, account.providerAccountId] }),
+    index("idx_account_userId").on(account.userId),
+  ]
+);
+
+export const authSessions = pgTable(
+  "session",
+  {
+    sessionToken: text("sessionToken").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expires: timestamp("expires", { mode: "date", withTimezone: true }).notNull(),
+  },
+  (session) => [
+    index("idx_session_userId").on(session.userId),
+  ]
+);
+
+export const verificationTokens = pgTable(
+  "verification_token",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { mode: "date", withTimezone: true }).notNull(),
+  },
+  (verificationToken) => [
+    primaryKey({
+      columns: [verificationToken.identifier, verificationToken.token],
+    }),
+  ]
+);

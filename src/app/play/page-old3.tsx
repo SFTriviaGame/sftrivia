@@ -1,17 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { AuthButton } from "@/components/auth-buttons";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 interface PuzzleSong {
   order: number;
   name: string;
+  artist?: string;
 }
 
 interface PuzzleData {
   id: string;
   artistId: string;
+  albumId: string;
+  filmId: string;
   mode: string;
   genre: string;
   tags: string[];
@@ -21,11 +26,12 @@ interface PuzzleData {
 }
 
 type GameState = "loading" | "ready" | "preview" | "playing" | "grace" | "won" | "lost" | "exhausted";
+type GameMode = "artist" | "album" | "soundtrack";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const TIMER_SECONDS = 30;
-const GRACE_SECONDS = 3;
+const GRACE_SECONDS = 6;
 const REVEAL_INTERVAL = 3;
 const PREVIEW_SECONDS = 3;
 const SCORE_MAX = 1000;
@@ -46,9 +52,18 @@ const TAG_LABELS: Record<string, string> = {
   "pop": "Pop",
   "classic-rock": "Classic Rock",
   "hair-metal": "Hair Metal",
+  "classic-soundtrack": "Soundtracks",
 };
 
-const TAG_ORDER = ["all", "60s", "70s", "80s", "90s", "2000s", "2010s", "pop", "classic-rock", "hair-metal"];
+const TAG_ORDER = ["all", "60s", "70s", "80s", "90s", "2000s", "2010s", "pop", "classic-rock", "hair-metal", "classic-soundtrack"];
+
+// ── Mode config ─────────────────────────────────────────────────────────────
+
+const MODE_CONFIG: Record<GameMode, { subtitle: string; placeholder: string; shareLabel: string }> = {
+  artist: { subtitle: "Name the Artist", placeholder: "Who is it?", shareLabel: "" },
+  album: { subtitle: "Name the Album", placeholder: "What album?", shareLabel: " — Album" },
+  soundtrack: { subtitle: "Name the Film", placeholder: "What film?", shareLabel: " — Soundtrack" },
+};
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -144,11 +159,26 @@ function saveScore(total: number, played: number, won: number, streak: number) {
   } catch {}
 }
 
+// ── Helper: get subject ID for deduplication ────────────────────────────────
+
+function getSubjectId(puzzle: PuzzleData, mode: GameMode): string | null {
+  if (mode === "soundtrack") return puzzle.filmId;
+  if (mode === "album") return puzzle.albumId;
+  return puzzle.artistId;
+}
+
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function PlayPage() {
+function PlayPageInner() {
+  const searchParams = useSearchParams();
+  const initialTag = searchParams.get("tag") || "all";
+  const rawMode = searchParams.get("mode") || "artist";
+  const initialMode = (["artist", "album", "soundtrack"].includes(rawMode) ? rawMode : "artist") as GameMode;
+
   const [puzzle, setPuzzle] = useState<PuzzleData | null>(null);
   const [gameState, setGameState] = useState<GameState>("loading");
+  const [selectedMode, setSelectedMode] = useState<GameMode>(initialMode);
+
   const [revealedCount, setRevealedCount] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(TIMER_SECONDS);
   const [graceRemaining, setGraceRemaining] = useState(GRACE_SECONDS);
@@ -161,18 +191,26 @@ export default function PlayPage() {
   const [songsUsed, setSongsUsed] = useState(0);
   const [scorePop, setScorePop] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [selectedTag, setSelectedTag] = useState("all");
+  const [selectedTag, setSelectedTag] = useState(initialTag);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [sessionScore, setSessionScore] = useState({ total: 0, played: 0, won: 0, streak: 0 });
   const [revealedAnswer, setRevealedAnswer] = useState("");
+  const [revealedArtist, setRevealedArtist] = useState("");
+  const [revealedSubtitle, setRevealedSubtitle] = useState("");
   const [validating, setValidating] = useState(false);
-  const [playedArtistIds, setPlayedArtistIds] = useState<string[]>([]);
+  const [playedSubjectIds, setPlayedSubjectIds] = useState<string[]>([]);
   const [latestDotIndex, setLatestDotIndex] = useState(-1);
+  const [wasGraceSave, setWasGraceSave] = useState(false);
+  const [wasGiveUp, setWasGiveUp] = useState(false);
+  const [newBadges, setNewBadges] = useState<string[]>([]);
+  const [newTitles, setNewTitles] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const revealRef = useRef<NodeJS.Timeout | null>(null);
   const songListRef = useRef<HTMLDivElement>(null);
+
+  const modeConfig = MODE_CONFIG[selectedMode];
 
   // ── Load stored score on mount ──────────────────────────────────────────
 
@@ -182,8 +220,8 @@ export default function PlayPage() {
 
   // ── Fetch puzzle ────────────────────────────────────────────────────────
 
-  const fetchPuzzle = useCallback((tag: string, excludeIds: string[] = []) => {
-    const params = new URLSearchParams({ t: String(Date.now()) });
+  const fetchPuzzle = useCallback((tag: string, mode: GameMode, excludeIds: string[] = []) => {
+    const params = new URLSearchParams({ t: String(Date.now()), mode });
     if (tag && tag !== "all") params.set("tag", tag);
     if (excludeIds.length > 0) params.set("exclude", excludeIds.join(","));
 
@@ -198,8 +236,9 @@ export default function PlayPage() {
       .then((data: PuzzleData) => {
         setPuzzle(data);
         if (data.availableTags) setAvailableTags(data.availableTags);
-        if (data.artistId) {
-          setPlayedArtistIds((prev) => [...prev, data.artistId]);
+        const subjectId = getSubjectId(data, mode);
+        if (subjectId) {
+          setPlayedSubjectIds((prev) => [...prev, subjectId]);
         }
         return data;
       });
@@ -208,7 +247,7 @@ export default function PlayPage() {
   // ── Server-side validation helpers ──────────────────────────────────────
 
   const validateGuess = useCallback(
-    async (puzzleId: string, guessText: string): Promise<{ correct: boolean; answer?: string }> => {
+    async (puzzleId: string, guessText: string): Promise<{ correct: boolean; answer?: string; artist?: string; year?: number; subtitle?: string }> => {
       const res = await fetch("/api/puzzle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,20 +258,20 @@ export default function PlayPage() {
     []
   );
 
-  const fetchAnswer = useCallback(async (puzzleId: string): Promise<string> => {
+  const fetchAnswer = useCallback(async (puzzleId: string): Promise<{ answer: string; artist?: string; year?: number; subtitle?: string }> => {
     const res = await fetch("/api/puzzle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ puzzleId, action: "reveal" }),
     });
     const data = await res.json();
-    return data.answer || "Unknown";
+    return { answer: data.answer || "Unknown", artist: data.artist, year: data.year, subtitle: data.subtitle };
   }, []);
 
   // ── Initial load ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchPuzzle("all")
+    fetchPuzzle(initialTag, initialMode)
       .then(() => setGameState("ready"))
       .catch((err) => {
         if (err.message === "exhausted") setGameState("exhausted");
@@ -256,13 +295,12 @@ export default function PlayPage() {
     return () => clearTimeout(t);
   }, [gameState]);
 
-  // ── Load next puzzle ────────────────────────────────────────────────────
+  // ── Reset helper ────────────────────────────────────────────────────────
 
-  const loadNextPuzzle = () => {
+  const resetGameState = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (revealRef.current) clearInterval(revealRef.current);
     setPuzzle(null);
-    setGameState("loading");
     setRevealedCount(0);
     setTimeRemaining(TIMER_SECONDS);
     setGraceRemaining(GRACE_SECONDS);
@@ -276,46 +314,57 @@ export default function PlayPage() {
     setScorePop(false);
     setCopied(false);
     setRevealedAnswer("");
+    setRevealedArtist("");
+    setRevealedSubtitle("");
     setValidating(false);
     setLatestDotIndex(-1);
-    fetchPuzzle(selectedTag, playedArtistIds)
+    setWasGraceSave(false);
+    setWasGiveUp(false);
+    setNewBadges([]);
+    setNewTitles([]);
+  };
+
+  // ── Load next puzzle ────────────────────────────────────────────────────
+
+  const loadNextPuzzle = () => {
+    resetGameState();
+    setGameState("loading");
+    fetchPuzzle(selectedTag, selectedMode, playedSubjectIds)
       .then(() => {
         setRevealedCount(1);
         setLatestDotIndex(0);
         setGameState("preview");
       })
       .catch((err) => {
-        if (err.message === "exhausted") {
-          setGameState("exhausted");
-        } else {
-          console.error(err);
-        }
+        if (err.message === "exhausted") setGameState("exhausted");
+        else console.error(err);
       });
   };
 
   // ── Change category ─────────────────────────────────────────────────────
 
   const changeCategory = (tag: string) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (revealRef.current) clearInterval(revealRef.current);
+    resetGameState();
     setSelectedTag(tag);
-    setPuzzle(null);
     setGameState("loading");
-    setRevealedCount(0);
-    setTimeRemaining(TIMER_SECONDS);
-    setGraceRemaining(GRACE_SECONDS);
-    setGuess("");
-    setWrongGuesses(0);
-    setScore(SCORE_MAX);
-    setFinalScore(0);
-    setWrongFlash(false);
-    setGuessHistory([]);
-    setSongsUsed(0);
-    setRevealedAnswer("");
-    setValidating(false);
-    setLatestDotIndex(-1);
-    setPlayedArtistIds([]);
-    fetchPuzzle(tag)
+    setPlayedSubjectIds([]);
+    fetchPuzzle(tag, selectedMode)
+      .then(() => setGameState("ready"))
+      .catch((err) => {
+        if (err.message === "exhausted") setGameState("exhausted");
+        else console.error(err);
+      });
+  };
+
+  // ── Change mode ─────────────────────────────────────────────────────────
+
+  const changeMode = (mode: GameMode) => {
+    if (mode === selectedMode) return;
+    resetGameState();
+    setSelectedMode(mode);
+    setGameState("loading");
+    setPlayedSubjectIds([]);
+    fetchPuzzle(selectedTag, mode)
       .then(() => setGameState("ready"))
       .catch((err) => {
         if (err.message === "exhausted") setGameState("exhausted");
@@ -386,7 +435,11 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (gameState === "lost" && puzzle && !revealedAnswer) {
-      fetchAnswer(puzzle.id).then(setRevealedAnswer);
+      fetchAnswer(puzzle.id).then((result) => {
+        setRevealedAnswer(result.answer);
+        if (result.artist) setRevealedArtist(result.artist);
+        if (result.subtitle) setRevealedSubtitle(result.subtitle);
+      });
     }
   }, [gameState, puzzle, revealedAnswer, fetchAnswer]);
 
@@ -403,6 +456,32 @@ export default function PlayPage() {
       };
       saveScore(updated.total, updated.played, updated.won, updated.streak);
       setSessionScore(updated);
+
+      if (puzzle) {
+        fetch("/api/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            puzzleId: puzzle.id,
+            score: gameState === "won" ? finalScore : 0,
+            mode: selectedMode,
+            genre: puzzle.genre || puzzle.tags?.[0] || null,
+            won: gameState === "won",
+            songsUsed: songsUsed,
+            wrongGuesses: wrongGuesses,
+            totalSongs: puzzle.totalSongs,
+            gracePeriodSave: wasGraceSave,
+            guessedAtClue: gameState === "won" ? songsUsed : null,
+            gaveUp: wasGiveUp,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.newBadges && data.newBadges.length > 0) setNewBadges(data.newBadges);
+            if (data.newTitles && data.newTitles.length > 0) setNewTitles(data.newTitles);
+          })
+          .catch(() => {});
+      }
     }
   }, [gameState, finalScore]);
 
@@ -413,8 +492,6 @@ export default function PlayPage() {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [gameState]);
-
-  // ── Refocus after validation completes (iOS fallback) ───────────────────
 
   useEffect(() => {
     if (!validating && (gameState === "preview" || gameState === "playing" || gameState === "grace")) {
@@ -439,10 +516,13 @@ export default function PlayPage() {
         if (timerRef.current) clearInterval(timerRef.current);
         if (revealRef.current) clearInterval(revealRef.current);
         const earned = gameState === "grace" ? SCORE_FLOOR : score;
+        setWasGraceSave(gameState === "grace");
         setFinalScore(earned);
         setSongsUsed(revealedCount);
         setRevealedCount(puzzle.totalSongs);
         setRevealedAnswer(result.answer || "");
+        if (result.artist) setRevealedArtist(result.artist);
+        if (result.subtitle) setRevealedSubtitle(result.subtitle);
         setGameState("won");
         setScorePop(true);
         setTimeout(() => setScorePop(false), 500);
@@ -473,6 +553,7 @@ export default function PlayPage() {
     setFinalScore(0);
     setSongsUsed(revealedCount);
     setRevealedCount(puzzle.totalSongs);
+    setWasGiveUp(true);
     setGameState("lost");
   };
 
@@ -485,7 +566,7 @@ export default function PlayPage() {
       if (gameState === "lost") return "⬛";
       return "⬜";
     });
-    const text = [`🎵 Deep Cut`, blocks.join(""),
+    const text = [`🎵 Deep Cut${modeConfig.shareLabel}`, blocks.join(""),
       gameState === "won" ? `${finalScore} pts — clue ${songsUsed}/${puzzle.totalSongs}` : `❌ Could not guess`,
     ].join("\n");
     navigator.clipboard.writeText(text);
@@ -508,7 +589,10 @@ export default function PlayPage() {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
-  // ── Exhausted — no more puzzles in this category ─────────────────────
+  // Mode badge label for header
+  const modeBadgeLabel = selectedMode === "album" ? "Album" : selectedMode === "soundtrack" ? "Soundtrack" : null;
+
+  // ── Exhausted ───────────────────────────────────────────────────────────
 
   if (gameState === "exhausted") {
     const otherTags = displayTags.filter((t) => t !== selectedTag);
@@ -518,67 +602,45 @@ export default function PlayPage() {
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
         <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
-            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">
-              🎉 Nice work
-            </p>
-            <h1 className="font-display text-3xl sm:text-4xl text-[#1a1a1a] mb-2 leading-tight">
-              You played them all
-            </h1>
+            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">🎉 Nice work</p>
+            <h1 className="font-display text-3xl sm:text-4xl text-[#1a1a1a] mb-2 leading-tight">You played them all</h1>
             <p className="font-body text-sm text-[#6b6b6b] mb-8">
               {selectedTag === "all"
-                ? "Every artist in the catalog. Impressive."
-                : `No more ${TAG_LABELS[selectedTag] || selectedTag} puzzles left this session.`}
+                ? `Every ${selectedMode} puzzle in the catalog. Impressive.`
+                : `No more ${TAG_LABELS[selectedTag] || selectedTag} ${selectedMode} puzzles left this session.`}
             </p>
-
             {sessionScore.played > 0 && (
               <div className="flex justify-center gap-5 mb-8 font-body text-xs text-[#737373]">
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
-                  <p className="text-[10px]">total pts</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.won}/{sessionScore.played}</p>
-                  <p className="text-[10px]">won</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">
-                    {Math.round(sessionScore.total / sessionScore.played)}
-                  </p>
-                  <p className="text-[10px]">avg</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.streak}</p>
-                  <p className="text-[10px]">streak</p>
-                </div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p><p className="text-[10px]">total pts</p></div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.won}/{sessionScore.played}</p><p className="text-[10px]">won</p></div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{Math.round(sessionScore.total / sessionScore.played)}</p><p className="text-[10px]">avg</p></div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.streak}</p><p className="text-[10px]">streak</p></div>
               </div>
             )}
-
             {selectedTag !== "all" && (
               <div className="mb-6">
                 <p className="font-body text-[10px] tracking-[3px] text-[#737373] uppercase mb-2.5">Try another category</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {otherTags.map((tag) => (
-                    <button
-                      key={tag}
-                      onClick={() => changeCategory(tag)}
-                      className="font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200
-                        bg-transparent text-[#4a4a4a] border-[#d5d0c7] hover:border-[#b45309] hover:text-[#b45309] active:scale-95"
-                    >
+                    <button key={tag} onClick={() => changeCategory(tag)} className="font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200 bg-transparent text-[#4a4a4a] border-[#d5d0c7] hover:border-[#b45309] hover:text-[#b45309] active:scale-95">
                       {TAG_LABELS[tag] || tag}
                     </button>
                   ))}
                 </div>
               </div>
             )}
-
-            <button
-              onClick={() => changeCategory("all")}
-              className="font-body w-full py-3 rounded-lg text-sm font-semibold tracking-wide uppercase
-                bg-[#b45309] text-white hover:bg-[#a14a08]
-                active:scale-[0.97] transition-all duration-150 shadow-sm"
-            >
+            <button onClick={() => changeCategory("all")} className="font-body w-full py-3 rounded-lg text-sm font-semibold tracking-wide uppercase bg-[#b45309] text-white hover:bg-[#a14a08] active:scale-[0.97] transition-all duration-150 shadow-sm">
               {selectedTag === "all" ? "Start Fresh" : "Play All Categories"}
             </button>
+            <nav className="mt-8 font-body text-[11px] text-[#737373]" aria-label="Navigation">
+              <AuthButton /><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/leaderboard" className="hover:text-[#b45309] transition-colors">Leaderboard</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/genres" className="hover:text-[#b45309] transition-colors">Genres</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/profile" className="hover:text-[#b45309] transition-colors">Profile</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/about" className="hover:text-[#b45309] transition-colors">How to Play</a>
+            </nav>
           </div>
         </main>
       </>
@@ -609,36 +671,34 @@ export default function PlayPage() {
         <style dangerouslySetInnerHTML={{ __html: injectedStyles }} />
         <main id="main-content" className="fixed inset-0 bg-[#FAFAF8] flex flex-col items-center justify-center px-6 overflow-y-auto">
           <div className="animate-fade-up text-center max-w-sm w-full">
-            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">
-              Daily Puzzle
-            </p>
-            <h1 className="font-display text-5xl sm:text-6xl text-[#1a1a1a] mb-1 leading-[1.05]">
-              Deep Cut
-            </h1>
-            <p className="font-display text-lg text-[#737373] italic mb-7">
-              Name the Artist
-            </p>
+            <p className="font-body text-[10px] tracking-[5px] text-[#737373] uppercase mb-2">Daily Puzzle</p>
+            <h1 className="font-display text-5xl sm:text-6xl text-[#1a1a1a] mb-1 leading-[1.05]">Deep Cut</h1>
+            <p className="font-display text-lg text-[#737373] italic mb-5">{modeConfig.subtitle}</p>
+
+            {/* Mode toggle — 3 buttons */}
+            <div className="flex justify-center gap-1 mb-7 bg-[#eae7e0] rounded-lg p-1" role="group" aria-label="Game mode">
+              {(["artist", "album", "soundtrack"] as GameMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => changeMode(mode)}
+                  aria-pressed={selectedMode === mode}
+                  className={`font-body text-xs px-3 py-1.5 rounded-md transition-all duration-200 ${
+                    selectedMode === mode
+                      ? "bg-white text-[#1a1a1a] shadow-sm font-medium"
+                      : "bg-transparent text-[#737373] hover:text-[#4a4a4a]"
+                  }`}
+                >
+                  {mode === "artist" ? "Artist" : mode === "album" ? "Album" : "Soundtrack"}
+                </button>
+              ))}
+            </div>
 
             {sessionScore.played > 0 && (
               <div className="flex justify-center gap-5 mb-7 font-body text-xs text-[#737373]">
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p>
-                  <p className="text-[10px]">total pts</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.won}/{sessionScore.played}</p>
-                  <p className="text-[10px]">won</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">
-                    {sessionScore.played > 0 ? Math.round(sessionScore.total / sessionScore.played) : 0}
-                  </p>
-                  <p className="text-[10px]">avg</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.streak}</p>
-                  <p className="text-[10px]">streak</p>
-                </div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.total.toLocaleString()}</p><p className="text-[10px]">total pts</p></div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.won}/{sessionScore.played}</p><p className="text-[10px]">won</p></div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.played > 0 ? Math.round(sessionScore.total / sessionScore.played) : 0}</p><p className="text-[10px]">avg</p></div>
+                <div><p className="text-lg font-bold text-[#1a1a1a] tabular-nums leading-tight">{sessionScore.streak}</p><p className="text-[10px]">streak</p></div>
               </div>
             )}
 
@@ -646,20 +706,8 @@ export default function PlayPage() {
               <p className="font-body text-[10px] tracking-[3px] text-[#737373] uppercase mb-2.5" id="category-label">Category</p>
               <div className="flex flex-wrap justify-center gap-1.5" role="group" aria-labelledby="category-label">
                 {displayTags.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => {
-                      if (tag !== selectedTag) changeCategory(tag);
-                    }}
-                    aria-pressed={tag === selectedTag}
-                    className={`
-                      font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200
-                      ${tag === selectedTag
-                        ? "bg-[#b45309] text-white border-[#b45309] shadow-sm"
-                        : "bg-transparent text-[#4a4a4a] border-[#d5d0c7] hover:border-[#b45309] hover:text-[#b45309] active:scale-95"
-                      }
-                    `}
-                  >
+                  <button key={tag} onClick={() => { if (tag !== selectedTag) changeCategory(tag); }} aria-pressed={tag === selectedTag}
+                    className={`font-body text-xs px-3 py-1.5 rounded-full border transition-all duration-200 ${tag === selectedTag ? "bg-[#b45309] text-white border-[#b45309] shadow-sm" : "bg-transparent text-[#4a4a4a] border-[#d5d0c7] hover:border-[#b45309] hover:text-[#b45309] active:scale-95"}`}>
                     {TAG_LABELS[tag] || tag}
                   </button>
                 ))}
@@ -669,11 +717,17 @@ export default function PlayPage() {
             <div className="space-y-2.5 mb-7 text-left">
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">01</span>
-                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">Songs reveal one at a time — deep cuts first, hits last</p>
+                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">
+                  {selectedMode === "soundtrack"
+                    ? "Songs from a film soundtrack reveal one at a time"
+                    : "Songs reveal one at a time — deep cuts first, hits last"}
+                </p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">02</span>
-                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">Type your guess whenever you think you know the artist</p>
+                <p className="font-body text-[13px] text-[#4a4a4a] leading-snug">
+                  Type your guess whenever you think you know the {selectedMode === "soundtrack" ? "film" : selectedMode}
+                </p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="font-body text-[10px] text-[#b45309] font-semibold mt-0.5 w-4 text-right shrink-0 tabular-nums">03</span>
@@ -681,18 +735,18 @@ export default function PlayPage() {
               </div>
             </div>
 
-            <button
-              onClick={startGame}
-              className="font-body w-full py-3 rounded-lg text-sm font-semibold tracking-wide uppercase
-                bg-[#b45309] text-white hover:bg-[#a14a08]
-                active:scale-[0.97] transition-all duration-150 shadow-sm"
-            >
-              Play
-            </button>
+            <button onClick={startGame} className="font-body w-full py-3 rounded-lg text-sm font-semibold tracking-wide uppercase bg-[#b45309] text-white hover:bg-[#a14a08] active:scale-[0.97] transition-all duration-150 shadow-sm">Play</button>
+            <p className="font-body text-[11px] text-[#737373] mt-3">{puzzle.totalSongs} clues · {TIMER_SECONDS}s</p>
 
-            <p className="font-body text-[11px] text-[#737373] mt-3">
-              {puzzle.totalSongs} clues · {TIMER_SECONDS}s
-            </p>
+            <nav className="mt-8 font-body text-[11px] text-[#737373]" aria-label="Navigation">
+              <AuthButton /><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/leaderboard" className="hover:text-[#b45309] transition-colors">Leaderboard</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/genres" className="hover:text-[#b45309] transition-colors">Genres</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/profile" className="hover:text-[#b45309] transition-colors">Profile</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/privacy" className="hover:text-[#b45309] transition-colors">Privacy</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/terms" className="hover:text-[#b45309] transition-colors">Terms</a><span className="mx-2" aria-hidden="true">·</span>
+              <a href="/about" className="hover:text-[#b45309] transition-colors">How to Play</a>
+            </nav>
           </div>
         </main>
       </>
@@ -709,45 +763,28 @@ export default function PlayPage() {
         {/* ── Compact sticky header ─────────────────────────────────────── */}
         <header className="shrink-0 z-10 bg-[#FAFAF8] border-b border-[#e8e5de]">
           <div className="max-w-lg mx-auto px-4 pt-2 pb-2">
-
-            {/* Row 1: ← Menu + category ... score/time */}
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => changeCategory(selectedTag)}
-                  className="text-[10px] text-[#737373] hover:text-[#4a4a4a] transition-colors"
-                  aria-label="Back to menu"
-                >
+                <button onClick={() => changeCategory(selectedTag)} className="text-[10px] text-[#737373] hover:text-[#4a4a4a] transition-colors" aria-label="Back to menu">
                   <span aria-hidden="true">← </span>Menu
                 </button>
                 {canGuess && (
                   <>
                     <span className="text-[10px] text-[#a09a90]" aria-hidden="true">·</span>
-                    <button
-                      onClick={giveUp}
-                      className="text-[10px] text-[#737373] hover:text-[#b91c1c] transition-colors"
-                      aria-label="Give up on this puzzle"
-                    >
-                      Give up
-                    </button>
+                    <button onClick={giveUp} className="text-[10px] text-[#737373] hover:text-[#b91c1c] transition-colors" aria-label="Give up on this puzzle">Give up</button>
                   </>
                 )}
+                {modeBadgeLabel && (
+                  <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">{modeBadgeLabel}</span>
+                )}
                 {selectedTag !== "all" && (
-                  <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">
-                    {TAG_LABELS[selectedTag] || selectedTag}
-                  </span>
+                  <span className="text-[9px] text-[#b45309] tracking-wide font-medium px-1.5 py-0.5 rounded bg-[#b45309]/[0.06]">{TAG_LABELS[selectedTag] || selectedTag}</span>
                 )}
               </div>
               <div className="flex items-baseline gap-1.5" aria-live="polite">
-                <p
-                  className={`text-2xl font-bold tabular-nums leading-none transition-colors duration-300 ${scorePop ? "animate-score-pop" : ""}`}
-                  style={{
-                    color: isFinished
-                      ? gameState === "won" ? "#15803d" : "#737373"
-                      : isUrgent ? "#b91c1c" : "#1a1a1a",
-                  }}
-                  aria-label={`Score: ${isFinished ? finalScore : score}`}
-                >
+                <p className={`text-2xl font-bold tabular-nums leading-none transition-colors duration-300 ${scorePop ? "animate-score-pop" : ""}`}
+                  style={{ color: isFinished ? (gameState === "won" ? "#15803d" : "#737373") : isUrgent ? "#b91c1c" : "#1a1a1a" }}
+                  aria-label={`Score: ${isFinished ? finalScore : score}`}>
                   {isFinished ? finalScore : score}
                 </p>
                 <p className="text-[10px] leading-none" style={{ color: isUrgent && (isActive || gameState === "preview") ? "#b91c1c" : "#737373" }}>
@@ -760,81 +797,27 @@ export default function PlayPage() {
               </div>
             </div>
 
-            {/* Row 2: Timer bar */}
-            <div
-              className="w-full h-[3px] bg-[#eae7e0] rounded-full overflow-hidden mb-2"
-              role="progressbar"
-              aria-valuenow={Math.round(timerPercent)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={
-                gameState === "preview" ? "Get ready"
-                : gameState === "grace" ? `Grace period: ${graceRemaining} seconds`
-                : `Time remaining: ${timeRemaining} seconds`
-              }
-            >
-              <div
-                className="h-full rounded-full transition-all duration-1000 linear"
-                style={{
-                  width: `${isFinished ? 0 : timerPercent}%`,
-                  backgroundColor: gameState === "preview" ? "#b45309"
-                    : gameState === "grace" ? "#b91c1c"
-                    : isUrgent ? "#b91c1c" : "#b45309",
-                }}
-              />
+            <div className="w-full h-[3px] bg-[#eae7e0] rounded-full overflow-hidden mb-2" role="progressbar"
+              aria-valuenow={Math.round(timerPercent)} aria-valuemin={0} aria-valuemax={100}
+              aria-label={gameState === "preview" ? "Get ready" : gameState === "grace" ? `Grace period: ${graceRemaining} seconds` : `Time remaining: ${timeRemaining} seconds`}>
+              <div className="h-full rounded-full transition-all duration-1000 linear"
+                style={{ width: `${isFinished ? 0 : timerPercent}%`, backgroundColor: gameState === "preview" ? "#b45309" : gameState === "grace" ? "#b91c1c" : isUrgent ? "#b91c1c" : "#b45309" }} />
             </div>
 
-            {/* Row 3: Guess input (during play only) */}
             {canGuess && (
-              <form
-                onSubmit={handleFormSubmit}
-                className={wrongFlash ? "animate-shake" : ""}
-                aria-label="Guess the artist"
-              >
-                <div
-                  className={`
-                    flex items-center rounded-lg border-2 transition-all duration-200
-                    ${wrongFlash
-                      ? "border-[#b91c1c] bg-[#fef2f2]"
-                      : "border-[#d5d0c7] bg-white focus-within:border-[#b45309] focus-within:shadow-sm"}
-                  `}
-                >
+              <form onSubmit={handleFormSubmit} className={wrongFlash ? "animate-shake" : ""} aria-label={`Guess the ${selectedMode === "soundtrack" ? "film" : selectedMode}`}>
+                <div className={`flex items-center rounded-lg border-2 transition-all duration-200 ${wrongFlash ? "border-[#b91c1c] bg-[#fef2f2]" : "border-[#d5d0c7] bg-white focus-within:border-[#b45309] focus-within:shadow-sm"}`}>
                   <label htmlFor="guess-input" className="sr-only">Your guess</label>
-                  <input
-                    id="guess-input"
-                    ref={inputRef}
-                    type="text"
-                    value={guess}
-                    onChange={(e) => setGuess(e.target.value)}
-                    placeholder="Who is it?"
-                    enterKeyHint="go"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#8a8580]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!guess.trim() || validating}
-                    aria-label="Submit guess"
-                    className="px-4 py-2 text-base font-semibold transition-all rounded-r-md
-                      text-[#b45309] hover:text-[#a14a08]
-                      disabled:opacity-20 disabled:cursor-not-allowed active:scale-90"
-                  >
-                    →
-                  </button>
+                  <input id="guess-input" ref={inputRef} type="text" value={guess} onChange={(e) => setGuess(e.target.value)}
+                    placeholder={modeConfig.placeholder} enterKeyHint="go" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                    className="flex-1 bg-transparent text-[15px] text-[#1a1a1a] px-3.5 py-2 outline-none placeholder:text-[#8a8580]" />
+                  <button type="submit" disabled={!guess.trim() || validating} aria-label="Submit guess"
+                    className="px-4 py-2 text-base font-semibold transition-all rounded-r-md text-[#b45309] hover:text-[#a14a08] disabled:opacity-20 disabled:cursor-not-allowed active:scale-90">→</button>
                 </div>
                 {guessHistory.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1 px-0.5" role="status" aria-label="Wrong guesses">
                     {guessHistory.map((g, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] text-[#b91c1c] px-1.5 py-0.5 rounded bg-[#fef2f2] line-through animate-fade-up"
-                        style={{ animationDelay: `${i * 40}ms` }}
-                      >
-                        {g}
-                      </span>
+                      <span key={i} className="text-[10px] text-[#b91c1c] px-1.5 py-0.5 rounded bg-[#fef2f2] line-through animate-fade-up" style={{ animationDelay: `${i * 40}ms` }}>{g}</span>
                     ))}
                   </div>
                 )}
@@ -844,39 +827,26 @@ export default function PlayPage() {
         </header>
 
         {/* ── Song list ─────────────────────────────────────────────────── */}
-        <main
-          id="main-content"
-          className="flex-1 overflow-y-auto hide-scrollbar"
-          ref={songListRef}
-        >
+        <main id="main-content" className="flex-1 overflow-y-auto hide-scrollbar" ref={songListRef}>
           <div className="max-w-lg mx-auto px-4 py-2.5">
 
-            {/* Answer card — appears at top of list on result */}
             {isFinished && (
-              <div
-                className={`
-                  animate-result-reveal mb-3 px-4 py-3 rounded-xl
-                  ${gameState === "won"
-                    ? "bg-[#f0fdf4] ring-1 ring-[#15803d]/20"
-                    : "bg-[#fef2f2] ring-1 ring-[#b91c1c]/15"
-                  }
-                `}
-                role="status"
-                aria-live="polite"
-              >
+              <div className={`animate-result-reveal mb-3 px-4 py-3 rounded-xl ${gameState === "won" ? "bg-[#f0fdf4] ring-1 ring-[#15803d]/20" : "bg-[#fef2f2] ring-1 ring-[#b91c1c]/15"}`} role="status" aria-live="polite">
                 <div className="flex items-center justify-between">
                   <div>
                     {gameState === "won" ? (
                       <>
                         <p className="font-display text-2xl text-[#15803d] leading-tight">{revealedAnswer}</p>
-                        <p className="text-[11px] text-[#6b6b6b] mt-0.5">
-                          Guessed on clue {songsUsed} of {puzzle.totalSongs} · {finalScore} pts
-                        </p>
+                        {revealedSubtitle && <p className="font-display text-sm text-[#15803d]/70 leading-tight mt-0.5">{revealedSubtitle}</p>}
+                        {revealedArtist && !revealedSubtitle && <p className="font-display text-sm text-[#15803d]/70 leading-tight mt-0.5">{revealedArtist}</p>}
+                        <p className="text-[11px] text-[#6b6b6b] mt-1">Guessed on clue {songsUsed} of {puzzle.totalSongs} · {finalScore} pts</p>
                       </>
                     ) : (
                       <>
                         <p className="text-[11px] text-[#6b6b6b]">The answer was</p>
                         <p className="font-display text-2xl text-[#b91c1c] leading-tight">{revealedAnswer || "..."}</p>
+                        {revealedSubtitle && <p className="font-display text-sm text-[#b91c1c]/70 leading-tight mt-0.5">{revealedSubtitle}</p>}
+                        {revealedArtist && !revealedSubtitle && <p className="font-display text-sm text-[#b91c1c]/70 leading-tight mt-0.5">{revealedArtist}</p>}
                       </>
                     )}
                   </div>
@@ -884,7 +854,6 @@ export default function PlayPage() {
               </div>
             )}
 
-            {/* Dot progress */}
             <div className="flex items-center gap-2 mb-2.5 px-0.5">
               <p className="text-[9px] tracking-[3px] text-[#737373] uppercase" aria-hidden="true">Clues</p>
               <div className="flex gap-[3px]" role="img" aria-label={`${revealedCount} of ${puzzle.totalSongs} clues revealed`}>
@@ -892,23 +861,14 @@ export default function PlayPage() {
                   const isRevealed = i < revealedCount;
                   const isWinDot = gameState === "won" && i === songsUsed - 1;
                   const justAppeared = i === latestDotIndex && canGuess;
-
                   return (
-                    <div
-                      key={i}
-                      className={`w-[6px] h-[6px] rounded-full transition-colors duration-300 ${justAppeared ? "animate-dot-pulse" : ""}`}
-                      style={{
-                        backgroundColor: isRevealed
-                          ? isWinDot ? "#15803d" : "#b45309"
-                          : "#e0ddd6",
-                      }}
-                    />
+                    <div key={i} className={`w-[6px] h-[6px] rounded-full transition-colors duration-300 ${justAppeared ? "animate-dot-pulse" : ""}`}
+                      style={{ backgroundColor: isRevealed ? (isWinDot ? "#15803d" : "#b45309") : "#e0ddd6" }} />
                   );
                 })}
               </div>
             </div>
 
-            {/* Songs — newest clue at top */}
             <ol className="space-y-1 list-none" aria-label="Song clues">
               {Array.from({ length: revealedCount }, (_, i) => revealedCount - 1 - i).map((idx) => {
                 const song = puzzle.songs[idx];
@@ -917,57 +877,33 @@ export default function PlayPage() {
                 const isOlder = idx < revealedCount - 1 && !isFinished;
 
                 return (
-                  <li
-                    key={idx}
-                    data-song
-                    className={`
-                      flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300
-                      animate-slide-reveal
-                      ${justRevealed
-                        ? "bg-white shadow-sm ring-1 ring-[#b45309]/20"
-                        : wasWinningSong
-                          ? "bg-[#f0fdf4] shadow-sm ring-1 ring-[#15803d]/25"
-                          : isOlder
-                            ? "bg-[#FAFAF8]"
-                            : "bg-white shadow-sm"
-                      }
-                    `}
+                  <li key={idx} data-song
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 animate-slide-reveal ${justRevealed ? "bg-white shadow-sm ring-1 ring-[#b45309]/20" : wasWinningSong ? "bg-[#f0fdf4] shadow-sm ring-1 ring-[#15803d]/25" : isOlder ? "bg-[#FAFAF8]" : "bg-white shadow-sm"}`}
                     style={{ opacity: isOlder ? 0.65 : 1 }}
-                    aria-label={`Clue ${idx + 1}: ${song.name}`}
-                  >
-                    <span
-                      className="text-[10px] font-mono w-5 text-right shrink-0 tabular-nums"
-                      style={{
-                        color: wasWinningSong ? "#15803d"
-                          : justRevealed ? "#b45309"
-                          : "#8a8580",
-                      }}
-                      aria-hidden="true"
-                    >
+                    aria-label={`Clue ${idx + 1}: ${song.name}${song.artist ? ` by ${song.artist}` : ""}`}>
+                    <span className="text-[10px] font-mono w-5 text-right shrink-0 tabular-nums"
+                      style={{ color: wasWinningSong ? "#15803d" : justRevealed ? "#b45309" : "#8a8580" }} aria-hidden="true">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
-                    <p className={`text-[14px] leading-snug ${
-                      wasWinningSong ? "text-[#15803d] font-medium"
-                      : justRevealed ? "text-[#1a1a1a]"
-                      : "text-[#4a4a4a]"
-                    }`}>
-                      {song.name}
-                    </p>
+                    <div className="min-w-0">
+                      <p className={`text-[14px] leading-snug ${wasWinningSong ? "text-[#15803d] font-medium" : justRevealed ? "text-[#1a1a1a]" : "text-[#4a4a4a]"}`}>
+                        {song.name}
+                      </p>
+                      {song.artist && (
+                        <p className="text-[11px] leading-snug mt-0.5" style={{ color: wasWinningSong ? "#15803d" : justRevealed ? "#737373" : "#a3a3a3" }}>
+                          {song.artist}
+                        </p>
+                      )}
+                    </div>
                   </li>
                 );
               })}
               {puzzle.songs.slice(revealedCount).map((_, i) => {
                 const originalIndex = revealedCount + i;
                 return (
-                  <li
-                    key={`unrevealed-${originalIndex}`}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                    style={{ opacity: 0.3 }}
-                    aria-label={`Clue ${originalIndex + 1}: not yet revealed`}
-                  >
-                    <span className="text-[10px] font-mono w-5 text-right shrink-0 tabular-nums text-[#d5d0c7]" aria-hidden="true">
-                      {String(originalIndex + 1).padStart(2, "0")}
-                    </span>
+                  <li key={`unrevealed-${originalIndex}`} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ opacity: 0.3 }}
+                    aria-label={`Clue ${originalIndex + 1}: not yet revealed`}>
+                    <span className="text-[10px] font-mono w-5 text-right shrink-0 tabular-nums text-[#d5d0c7]" aria-hidden="true">{String(originalIndex + 1).padStart(2, "0")}</span>
                     <div className="h-[8px] rounded-sm bg-[#e5e2db]" style={{ width: `${30 + ((originalIndex * 19) % 50)}%` }} aria-hidden="true" />
                   </li>
                 );
@@ -978,30 +914,61 @@ export default function PlayPage() {
           </div>
         </main>
 
-        {/* ── Sticky bottom bar — result actions ────────────────────────── */}
+        {/* ── Sticky bottom bar ─────────────────────────────────────────── */}
+        {newTitles.length > 0 && (
+          <div className="shrink-0 z-20 bg-[#fef3c7] border-t border-[#f59e0b]">
+            <div className="max-w-lg mx-auto px-4 py-2.5 flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">👑</span>
+              <p className="font-body text-sm text-[#92400e] font-medium">Level up: {newTitles.join(", ")}</p>
+            </div>
+          </div>
+        )}
+        {newBadges.length > 0 && (
+          <div className="shrink-0 z-20 bg-[#faeeda] border-t border-[#e8c97a]">
+            <div className="max-w-lg mx-auto px-4 py-2.5 flex items-center gap-2">
+              <span className="text-base" aria-hidden="true">🏆</span>
+              <p className="font-body text-sm text-[#854f0b] font-medium">Badge earned: {newBadges.join(", ")}</p>
+            </div>
+          </div>
+        )}
         {isFinished && (
           <div className="shrink-0 z-10 bg-[#FAFAF8] border-t border-[#e8e5de]" style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
-            <div className="max-w-lg mx-auto px-4 pt-2 pb-0 flex gap-2">
-              <button
-                onClick={handleShare}
-                aria-label={copied ? "Copied to clipboard" : "Share your result"}
-                className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium
-                  hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all"
-              >
-                {copied ? "Copied!" : "Share"}
-              </button>
-              <button
-                onClick={loadNextPuzzle}
-                aria-label="Next puzzle"
-                className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold
-                  hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm"
-              >
-                Next <span aria-hidden="true">→</span>
-              </button>
+            <div className="max-w-lg mx-auto px-4 pt-2 pb-0">
+              <div className="flex gap-2">
+                <button onClick={handleShare} aria-label={copied ? "Copied to clipboard" : "Share your result"}
+                  className="flex-1 text-sm py-2.5 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all">
+                  {copied ? "Copied!" : "Share"}
+                </button>
+                <a href="/profile" aria-label="View your profile"
+                  className="text-sm py-2.5 px-4 rounded-lg border border-[#d5d0c7] text-[#4a4a4a] font-medium hover:border-[#8a8580] hover:text-[#1a1a1a] active:scale-[0.97] transition-all flex items-center justify-center">
+                  Profile
+                </a>
+                <button onClick={loadNextPuzzle} aria-label="Next puzzle"
+                  className="flex-1 text-sm py-2.5 rounded-lg bg-[#b45309] text-white font-semibold hover:bg-[#a14a08] active:scale-[0.97] transition-all shadow-sm">
+                  Next <span aria-hidden="true">→</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
     </>
+  );
+}
+
+export default function PlayPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="fixed inset-0 bg-[#FAFAF8] flex items-center justify-center">
+          <div className="text-center">
+            <p style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.5rem", color: "#1a1a1a", marginBottom: "0.25rem" }}>Deep Cut</p>
+            <p style={{ fontFamily: "var(--font-body), system-ui, sans-serif", color: "#737373", fontSize: "0.75rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>Loading...</p>
+          </div>
+        </main>
+      }
+    >
+      <PlayPageInner />
+    </Suspense>
   );
 }

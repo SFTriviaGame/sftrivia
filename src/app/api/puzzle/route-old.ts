@@ -32,22 +32,10 @@ function normalize(str: string): string {
 function normalizeAlbumName(str: string): string {
   return normalize(
     str
+      // Strip parenthetical editions: (Deluxe Edition), (Remastered), etc.
       .replace(/\s*\([^)]*(?:edition|remaster|deluxe|special|bonus|anniversary|expanded|collector)[^)]*\)/gi, "")
+      // Strip bracket editions: [Deluxe], [Remastered], etc.
       .replace(/\s*\[[^\]]*(?:edition|remaster|deluxe|special|bonus|anniversary|expanded|collector)[^\]]*\]/gi, "")
-      .trim()
-  );
-}
-
-function normalizeFilmTitle(str: string): string {
-  return normalize(
-    str
-      // Strip common suffixes
-      .replace(/\s*\([^)]*(?:soundtrack|motion picture|original)[^)]*\)/gi, "")
-      .replace(/\s*:\s*the motion picture$/i, "")
-      // Roman numeral / digit equivalence
-      .replace(/\bii\b/g, "2")
-      .replace(/\biii\b/g, "3")
-      .replace(/\biv\b/g, "4")
       .trim()
   );
 }
@@ -73,11 +61,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 function isCorrectGuess(guess: string, answer: string, mode: string = "artist"): boolean {
-  const normalizeFunc =
-    mode === "album" ? normalizeAlbumName :
-    mode === "soundtrack" ? normalizeFilmTitle :
-    normalize;
-
+  const normalizeFunc = mode === "album" ? normalizeAlbumName : normalize;
   const ng = normalizeFunc(guess);
   const na = normalizeFunc(answer);
   if (ng === na) return true;
@@ -90,18 +74,11 @@ function isCorrectGuess(guess: string, answer: string, mode: string = "artist"):
   if (levenshtein(ng, na) <= maxDist) return true;
   if (levenshtein(ngNoThe, naNoThe) <= maxDist) return true;
 
-  // Album mode: also try matching against stripped version
+  // Album mode: also try matching against stripped version of the answer
   if (mode === "album") {
     const naStripped = normalize(answer);
     if (ng === naStripped) return true;
     if (levenshtein(ng, naStripped) <= maxDist) return true;
-  }
-
-  // Soundtrack mode: also try plain normalize
-  if (mode === "soundtrack") {
-    const naPlain = normalize(answer);
-    if (ng === naPlain) return true;
-    if (levenshtein(ng, naPlain) <= maxDist) return true;
   }
 
   return false;
@@ -110,24 +87,28 @@ function isCorrectGuess(guess: string, answer: string, mode: string = "artist"):
 // ── Song selection: lock top 3 hits, rotate deep cuts (Artist mode only) ─
 
 function selectSongs(
-  allSongs: { displayOrder: number; songName: string; artistName?: string }[]
-): { order: number; name: string; artist?: string }[] {
+  allSongs: { displayOrder: number; songName: string }[]
+): { order: number; name: string }[] {
   const total = allSongs.length;
 
   if (total <= SONGS_TO_SHOW) {
-    return allSongs.map((s, i) => ({ order: i + 1, name: s.songName, artist: s.artistName }));
+    return allSongs.map((s, i) => ({ order: i + 1, name: s.songName }));
   }
 
+  // Lock the top 3 most popular (highest displayOrder = last in sorted array)
   const locked = allSongs.slice(total - LOCKED_HITS);
+
+  // Randomly pick 6 from the deep cut pool
   const deepCutPool = allSongs.slice(0, total - LOCKED_HITS);
   const shuffled = [...deepCutPool].sort(() => Math.random() - 0.5);
   const selectedDeepCuts = shuffled.slice(0, SONGS_TO_SHOW - LOCKED_HITS);
 
+  // Combine and sort by displayOrder ASC (deep cuts first, hits last)
   const combined = [...selectedDeepCuts, ...locked].sort(
     (a, b) => a.displayOrder - b.displayOrder
   );
 
-  return combined.map((s, i) => ({ order: i + 1, name: s.songName, artist: s.artistName }));
+  return combined.map((s, i) => ({ order: i + 1, name: s.songName }));
 }
 
 // ── Album mode: use all songs, no rotation ──────────────────────────────
@@ -136,14 +117,6 @@ function selectAlbumSongs(
   allSongs: { displayOrder: number; songName: string }[]
 ): { order: number; name: string }[] {
   return allSongs.map((s, i) => ({ order: i + 1, name: s.songName }));
-}
-
-// ── Soundtrack mode: use all songs with artist names, no rotation ───────
-
-function selectSoundtrackSongs(
-  allSongs: { displayOrder: number; songName: string; artistName: string }[]
-): { order: number; name: string; artist: string }[] {
-  return allSongs.map((s, i) => ({ order: i + 1, name: s.songName, artist: s.artistName }));
 }
 
 // ── GET: Fetch a random puzzle ──────────────────────────────────────────
@@ -167,25 +140,24 @@ export async function GET(request: Request) {
       conditions.push(sql`${tag} = ANY(${schema.puzzles.tags})`);
     }
 
-    // Filter by mode
+    // Filter by mode: album puzzles have album_id, artist puzzles have artist_id
     if (mode === "album") {
       conditions.push(isNotNull(schema.puzzles.albumId));
       if (excludedIds.length > 0) {
-        conditions.push(notInArray(schema.puzzles.albumId, excludedIds));
-      }
-    } else if (mode === "soundtrack") {
-      conditions.push(isNotNull(schema.puzzles.filmId));
-      if (excludedIds.length > 0) {
-        conditions.push(notInArray(schema.puzzles.filmId, excludedIds));
+        conditions.push(
+          notInArray(schema.puzzles.albumId, excludedIds)
+        );
       }
     } else {
-      // Artist mode (default)
       conditions.push(isNotNull(schema.puzzles.artistId));
       if (excludedIds.length > 0) {
-        conditions.push(notInArray(schema.puzzles.artistId, excludedIds));
+        conditions.push(
+          notInArray(schema.puzzles.artistId, excludedIds)
+        );
       }
     }
 
+    // Fetch randomized candidates, find first with enough songs
     const candidates = await db
       .select({
         id: schema.puzzles.id,
@@ -194,7 +166,6 @@ export async function GET(request: Request) {
         tags: schema.puzzles.tags,
         artistId: schema.puzzles.artistId,
         albumId: schema.puzzles.albumId,
-        filmId: schema.puzzles.filmId,
       })
       .from(schema.puzzles)
       .where(and(...conditions))
@@ -218,48 +189,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No puzzle found" }, { status: 404 });
     }
 
-    // Fetch songs — for soundtrack mode, include artist names
-    let selectedSongs: { order: number; name: string; artist?: string }[];
+    const allSongRows = await db
+      .select({
+        displayOrder: schema.puzzleSongs.displayOrder,
+        songName: schema.songs.name,
+      })
+      .from(schema.puzzleSongs)
+      .innerJoin(schema.songs, eq(schema.puzzleSongs.songId, schema.songs.id))
+      .where(eq(schema.puzzleSongs.puzzleId, puzzle.id))
+      .orderBy(asc(schema.puzzleSongs.displayOrder));
 
-    if (mode === "soundtrack") {
-      const allSongRows = await db
-        .select({
-          displayOrder: schema.puzzleSongs.displayOrder,
-          songName: schema.songs.name,
-          artistName: schema.artists.name,
-        })
-        .from(schema.puzzleSongs)
-        .innerJoin(schema.songs, eq(schema.puzzleSongs.songId, schema.songs.id))
-        .innerJoin(schema.artists, eq(schema.songs.artistId, schema.artists.id))
-        .where(eq(schema.puzzleSongs.puzzleId, puzzle.id))
-        .orderBy(asc(schema.puzzleSongs.displayOrder));
-
-      selectedSongs = selectSoundtrackSongs(allSongRows);
-    } else if (mode === "album") {
-      const allSongRows = await db
-        .select({
-          displayOrder: schema.puzzleSongs.displayOrder,
-          songName: schema.songs.name,
-        })
-        .from(schema.puzzleSongs)
-        .innerJoin(schema.songs, eq(schema.puzzleSongs.songId, schema.songs.id))
-        .where(eq(schema.puzzleSongs.puzzleId, puzzle.id))
-        .orderBy(asc(schema.puzzleSongs.displayOrder));
-
-      selectedSongs = selectAlbumSongs(allSongRows);
-    } else {
-      const allSongRows = await db
-        .select({
-          displayOrder: schema.puzzleSongs.displayOrder,
-          songName: schema.songs.name,
-        })
-        .from(schema.puzzleSongs)
-        .innerJoin(schema.songs, eq(schema.puzzleSongs.songId, schema.songs.id))
-        .where(eq(schema.puzzleSongs.puzzleId, puzzle.id))
-        .orderBy(asc(schema.puzzleSongs.displayOrder));
-
-      selectedSongs = selectSongs(allSongRows);
-    }
+    // Album mode uses all songs; Artist mode uses rotation
+    const selectedSongs = mode === "album"
+      ? selectAlbumSongs(allSongRows)
+      : selectSongs(allSongRows);
 
     const allTags = await db
       .select({ tags: schema.puzzles.tags })
@@ -271,12 +214,12 @@ export async function GET(request: Request) {
       if (row.tags) row.tags.forEach((t) => { if (t) tagSet.add(t); });
     });
 
+    // Answer is NOT sent to the client
     return NextResponse.json(
       {
         id: puzzle.id,
         artistId: puzzle.artistId,
         albumId: puzzle.albumId,
-        filmId: puzzle.filmId,
         mode: mode,
         genre: puzzle.primaryGenre,
         tags: puzzle.tags || [],
@@ -318,7 +261,6 @@ export async function POST(request: Request) {
       .select({
         artistId: schema.puzzles.artistId,
         albumId: schema.puzzles.albumId,
-        filmId: schema.puzzles.filmId,
       })
       .from(schema.puzzles)
       .where(eq(schema.puzzles.id, puzzleId))
@@ -326,42 +268,6 @@ export async function POST(request: Request) {
 
     if (!puzzleRow) {
       return NextResponse.json({ error: "Puzzle not found" }, { status: 404 });
-    }
-
-    // ── Soundtrack mode ───────────────────────────────────────────────
-    if (puzzleRow.filmId) {
-      const film = await db
-        .select({
-          title: schema.films.title,
-          year: schema.films.year,
-        })
-        .from(schema.films)
-        .where(eq(schema.films.id, puzzleRow.filmId))
-        .then((rows) => rows[0]);
-
-      if (!film) {
-        return NextResponse.json({ error: "Film not found" }, { status: 404 });
-      }
-
-      const yearStr = film.year ? ` (${film.year})` : "";
-
-      if (action === "reveal") {
-        return NextResponse.json(
-          { answer: film.title, year: film.year, subtitle: yearStr },
-          { headers: { "Cache-Control": "no-store" } }
-        );
-      }
-
-      if (!guess || !guess.trim()) {
-        return NextResponse.json({ error: "guess required" }, { status: 400 });
-      }
-
-      const correct = isCorrectGuess(guess.trim(), film.title, "soundtrack");
-
-      return NextResponse.json(
-        { correct, ...(correct ? { answer: film.title, year: film.year, subtitle: yearStr } : {}) },
-        { headers: { "Cache-Control": "no-store" } }
-      );
     }
 
     // ── Album mode ────────────────────────────────────────────────────
