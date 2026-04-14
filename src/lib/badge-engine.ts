@@ -210,7 +210,7 @@ export async function evaluateBadges(
         const rows = (dualResult as { rows: unknown[] }).rows;
         if (rows.length > 0) grant("dual_threat");
       }
-    } catch (err) {
+    } catch {
       // Skip dual threat check if query fails
     }
   }

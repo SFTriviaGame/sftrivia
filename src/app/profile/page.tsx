@@ -243,7 +243,6 @@ export default function ProfilePage() {
   const genreTracks = titles?.genreTracks || [];
   const depthTitles = titles?.depthTitles || [];
   const higherTitles = titles?.higherTitles || [];
-  const hasAnyTitles = genreTracks.length > 0 || depthTitles.length > 0 || higherTitles.length > 0;
 
   return (
     <div className="min-h-screen w-full" style={{ background: "#FAFAF8", color: "#252018" }}>

@@ -8,15 +8,11 @@
 
 import { db } from "@/db";
 import {
-  titles,
-  playerTitles,
-  playerPuzzleHistory,
-  playerScores,
   puzzles,
   artists,
   albums,
 } from "@/db/schema";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 // =============================================================
 // TYPES
@@ -1072,7 +1068,7 @@ async function findOrCreateTitle(params: CreateTitleParams): Promise<string> {
 async function grantTitleToPlayer(
   playerId: string,
   titleId: string,
-  puzzleId: string | null
+  _puzzleId: string | null
 ): Promise<boolean> {
   try {
     await db.execute(sql`
