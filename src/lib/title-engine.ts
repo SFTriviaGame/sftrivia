@@ -304,6 +304,7 @@ for (const genre of tags) {
 // GENRE STATS CALCULATION
 // =============================================================
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function calculateGenreStats(
   playerId: string,
   genre: string
@@ -1065,6 +1066,7 @@ async function findOrCreateTitle(params: CreateTitleParams): Promise<string> {
 // HELPER — Grant Title to Player (with duplicate protection)
 // =============================================================
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function grantTitleToPlayer(
   playerId: string,
   titleId: string,
